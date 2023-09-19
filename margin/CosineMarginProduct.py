@@ -7,7 +7,7 @@ from torch.nn import Parameter
 
 
 class CosineMarginProduct(nn.Module):
-    def __init__(self, in_feature=128, out_feature=10575, s=30.0, m=0.35):
+    def __init__(self, in_feature=128, out_feature=10575, s=32.0, m=0.4):
         super(CosineMarginProduct, self).__init__()
         self.in_feature = in_feature
         self.out_feature = out_feature

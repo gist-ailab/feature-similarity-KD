@@ -2,7 +2,7 @@ import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 import torch.utils.data
 from torch.nn import DataParallel
-from model.backbone import CBAMResNet
+from backbone.iresnet import iresnet18, iresnet50
 import torchvision.transforms as transforms
 import argparse
 import subprocess
@@ -91,7 +91,11 @@ def load_model(args):
     device = torch.device('cuda')
 
     # define backbone and margin layer
-    net = CBAMResNet(50, feature_dim=512, mode=args.mode)
+    if args.backbone == 'iresnet18':
+        net = iresnet18(attention_type=args.mode, pooling=args.pooling)
+    elif args.backbone == 'iresnet50':
+        net = iresnet50(attention_type=args.mode, pooling=args.pooling)
+        
     net.load_state_dict(torch.load(args.checkpoint_path)['net_state_dict'])
 
     if multi_gpus:
@@ -133,15 +137,17 @@ def calc_accuracy(tinyface_test, probe, gallery, do_norm=True):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='tinyface')
-    parser.add_argument('--tinyface_dir', default='aligned_pad_0.1_pad_high/')
+    parser.add_argument('--tinyface_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/aligned_pad_0.1_pad_high/')
     parser.add_argument('--gpus', default='0', type=str)
     parser.add_argument('--batch_size', default=512, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
-    parser.add_argument('--save_dir', type=str, default='result/')
-    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/F-SKD/last_net.ckpt', help='scale size')
+    parser.add_argument('--backbone', type=str, default='iresnet50')
+    parser.add_argument('--pooling', type=str, default='A') #
+    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/naive/iresnet50-E-IR/resol1-random/last_net.ckpt', help='scale size')
     parser.add_argument('--use_flip_test', type=str2bool, default='True')
     args = parser.parse_args()
     
+    args.save_dir = os.path.join(os.path.dirname(args.checkpoint_path), 'tinyface_result')
     os.makedirs(args.save_dir, exist_ok=True)
     
     # load model

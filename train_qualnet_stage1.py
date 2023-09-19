@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 # encoding: utf-8
+
 import os
 import pathlib
 base_folder = str(pathlib.Path(__file__).parent.resolve())
 os.chdir(base_folder)
-
 import torch.utils.data
-from torch.nn import DataParallel
+from backbone.irevnet import iRevNet
 from backbone.iresnet import iresnet18, iresnet50
+from torch.nn import DataParallel
 from margin.ArcMarginProduct import ArcMarginProduct
 from margin.CosineMarginProduct import CosineMarginProduct
 from margin.AdaMarginProduct import AdaMarginProduct
-
 from utility.log import init_log
 from dataset.casia_webface import CASIAWebFace
 from dataset.agedb import AgeDB30
@@ -19,13 +19,17 @@ from dataset.cfp import CFP_FP
 from dataset.lfw import LFW
 from torch.optim import lr_scheduler
 import torch.optim as optim
+import torch.nn as nn
 import time
 from evaluation.eval_lfw import evaluation_10_fold, getFeatureFromTorch
 import numpy as np
 import torchvision.transforms as transforms
 import argparse
 from tqdm import tqdm
+import torch.nn.functional as F
+from copy import deepcopy
 import random
+from metric.distill_loss import cosine_loss, normalize, cross_kd
 
 
 def set_random_seed(seed_value, use_cuda=True):
@@ -38,6 +42,13 @@ def set_random_seed(seed_value, use_cuda=True):
         torch.cuda.manual_seed_all(seed_value) # gpu vars
         torch.backends.cudnn.deterministic = True  #needed
         torch.backends.cudnn.benchmark = False
+
+
+def un_normalize(image, mu=torch.tensor([0.5, 0.5, 0.5]).float(), std=torch.tensor([0.5, 0.5, 0.5]).float()):
+    device = image.device
+    image = image.permute(0, 2, 3, 1) * std.to(device) + mu.to(device)
+    image = image.permute(0, 3, 1, 2)
+    return image
 
 
 def train(args):
@@ -62,16 +73,23 @@ def train(args):
 
     # validation dataset
     trainset = CASIAWebFace(args.train_root, args.train_file_list, args.down_size, transform=transform, equal=args.equal, interpolation_option=args.interpolation)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=False)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
+                                              shuffle=True, num_workers=8, drop_last=False)
     
 
     # define backbone and margin layer
     if args.backbone == 'iresnet50':
-        net = iresnet50(attention_type=args.mode, pooling=args.pooling)
+        net = iresnet50(attention_type=args.mode, pooling=args.pooling, qualnet=True)
     elif args.backbone == 'iresnet18':
-        net = iresnet18(attention_type=args.mode, pooling=args.pooling)    
-        
-    # Head
+        net = iresnet18(attention_type=args.mode, pooling=args.pooling, qualnet=True)
+
+
+    # Decoder (Reconstruct to HR images)
+    decoder = iRevNet(nBlocks=[6, 16, 72, 6], nStrides=[2, 2, 2, 1],
+                  nChannels=[24, 96, 384, 1536], nClasses=1000, init_ds=2,
+                  dropout_rate=0., affineBN=True, in_shape=[3, 112, 112], mult=4)
+
+    # Margin
     if args.margin_type == 'ArcFace':
         margin = ArcMarginProduct(args.feature_dim, trainset.class_nums)
     elif args.margin_type == 'CosFace':
@@ -81,45 +99,53 @@ def train(args):
     else:
         print(args.margin_type, 'is not available!')
 
-    
+
     # define optimizers for different layer
     criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer_ft = optim.SGD([
         {'params': net.parameters(), 'weight_decay': 5e-4},
-        {'params': margin.parameters(), 'weight_decay': 5e-4}
+        {'params': margin.parameters(), 'weight_decay': 5e-4},
+        {'params': decoder.parameters(), 'weight_decay': 5e-4}
     ], lr=0.1, momentum=0.9, nesterov=True)
     exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[18000, 28000, 36000, 44000], gamma=0.1)
 
     if multi_gpus:
         net = DataParallel(net).to(device)
+        decoder = DataParallel(decoder).to(device)
         margin = DataParallel(margin).to(device)
     else:
         net = net.to(device)
+        decoder = decoder.to(device)
         margin = margin.to(device)
 
     total_iters = 0
+
 
     # Run
     GOING = True
     while GOING:
         # train model
         net.train()
+        decoder.train()
         margin.train()
 
         since = time.time()
         for data in tqdm(trainloader):            
             img, label = data[1].to(device), data[2].to(device)                  
                         
-            raw_logits = net(img)
+            raw_logits, out_bij = net(img)
             if args.margin_type == 'AdaFace':
                 norm = torch.norm(raw_logits, 2, 1, True)
                 out = margin(raw_logits, norm, label)
             else:
                 out = margin(raw_logits, label)
             
+            HR_img_gen = decoder.inverse(out_bij)
+            
             # Loss
             cri_loss = criterion(out, label)
-            total_loss = cri_loss
+            recon_loss = F.l1_loss(torch.clip(HR_img_gen, 0, 1), un_normalize(img))
+            total_loss = cri_loss + recon_loss
 
 
             # Optim
@@ -183,14 +209,17 @@ def train(args):
     _print(msg)
     if multi_gpus:
         net_state_dict = net.module.state_dict()
+        decoder_state_dict = decoder.module.state_dict()
         margin_state_dict = margin.module.state_dict()
     else:
         net_state_dict = net.state_dict()
+        decoder_state_dict = decoder.state_dict()
         margin_state_dict = margin.state_dict()
         
     torch.save({
         'iters': total_iters,
-        'net_state_dict': net_state_dict
+        'net_state_dict': net_state_dict,
+        'decoder_state_dict': decoder_state_dict
         },
         os.path.join(save_dir, 'last_net.ckpt'))
     torch.save({
@@ -201,6 +230,7 @@ def train(args):
 
     # test dataset
     net.eval()
+    decoder.eval()
     margin.eval()
     
     print('Evaluation on LFW, AgeDB-30. CFP')
@@ -226,17 +256,17 @@ def train(args):
         lfwloader = torch.utils.data.DataLoader(lfwdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
 
         # test model on AgeDB30
-        getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_agedb30_result.mat'), net, device, agedbdataset, agedbloader)
+        getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_agedb30_result.mat'), net, device, agedbdataset, agedbloader, qualnet=True)
         age_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_agedb30_result.mat'))
         _print('Evaluation Result on AgeDB-30 %dX - %.2f' %(down_size, np.mean(age_accs) * 100))
 
         # test model on CFP-FP
-        getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_cfpfp_result.mat'), net, device, cfpfpdataset, cfpfploader)
+        getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_cfpfp_result.mat'), net, device, cfpfpdataset, cfpfploader, qualnet=True)
         cfp_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_cfpfp_result.mat'))
         _print('Evaluation Result on CFP-ACC %dX - %.2f' %(down_size, np.mean(cfp_accs) * 100))
         
         # test model on LFW
-        getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_lfw_result.mat'), net, device, lfwdataset, lfwloader)
+        getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_lfw_result.mat'), net, device, lfwdataset, lfwloader, qualnet=True)
         lfw_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_lfw_result.mat'))
         _print('Evaluation Result on LFW-ACC %dX - %.2f' %(down_size, np.mean(lfw_accs) * 100))
 
@@ -251,7 +281,7 @@ def train(args):
         _print('average - cfp_accs : %.2f' %(average_cfp / len(eval_list)))
         _print('average - lfw_accs : %.2f' %(average_lfw / len(eval_list)))
 
-
+        
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')

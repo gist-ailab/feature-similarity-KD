@@ -66,7 +66,7 @@ class IBasicBlock(nn.Module):
         self.bn3 = nn.BatchNorm2d(planes, eps=1e-05,)
         self.downsample = downsample
         self.stride = stride
-
+        
         if attention_type == 'cbam' or attention_type == 'se':
             self.attention_target_all = target(feat_type='attention')
         else:
@@ -99,9 +99,7 @@ class IBasicBlock(nn.Module):
         if self.attention_target_all is not None:
             _ = self.attention_target_all(attn)
 
-        # Residual
         out += identity
-        
         return out
 
     def forward(self, x):
@@ -111,13 +109,14 @@ class IBasicBlock(nn.Module):
 class IResNet(nn.Module):
     fc_scale = 7 * 7
     def __init__(self,
-                 block, layers, dropout=0, num_features=512, zero_init_residual=False,
-                 groups=1, width_per_group=64, replace_stride_with_dilation=None, attention_type='ir'):
+                 block, layers, pooling, dropout=0, num_features=512, zero_init_residual=False,
+                 groups=1, width_per_group=64, replace_stride_with_dilation=None, attention_type='ir', qualnet=False):
         super(IResNet, self).__init__()
         self.extra_gflops = 0.0
         self.inplanes = 64
         self.dilation = 1
         self.attention_type = attention_type
+        self.qualnet = qualnet
         
         if replace_stride_with_dilation is None:
             replace_stride_with_dilation = [False, False, False]
@@ -147,17 +146,26 @@ class IResNet(nn.Module):
                                        dilate=replace_stride_with_dilation[2])
         
         self.feature_target_block = target()
+        self.pooling = pooling
+        
+        # Bridge
+        if self.qualnet:
+            self.conv_bridge = nn.Conv2d(512, 3072, kernel_size=3, stride=1, padding=1)
         
         # Option A
-        self.gp = nn.AdaptiveAvgPool2d((1,1))
-
-        # # Option E
-        # self.bn2 = nn.BatchNorm2d(512 * block.expansion, eps=1e-05,)
-        # self.dropout = nn.Dropout(p=dropout, inplace=True)
-        # self.fc = nn.Linear(512 * block.expansion * self.fc_scale, num_features)
-        # self.features = nn.BatchNorm1d(num_features, eps=1e-05)
-        # nn.init.constant_(self.features.weight, 1.0)
-        # self.features.weight.requires_grad = False
+        if self.pooling == 'A':
+            self.gp = nn.AdaptiveAvgPool2d((1,1))
+        elif self.pooling == 'E':
+            # Option E
+            self.bn2 = nn.BatchNorm2d(512 * block.expansion, eps=1e-05,)
+            self.dropout = nn.Dropout(p=dropout, inplace=True)
+            self.fc = nn.Linear(512 * block.expansion * self.fc_scale, num_features)
+            self.features = nn.BatchNorm1d(num_features, eps=1e-05)
+            nn.init.constant_(self.features.weight, 1.0)
+            self.features.weight.requires_grad = False
+        else:
+            raise('Select Proper Pooling')
+        
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -199,37 +207,52 @@ class IResNet(nn.Module):
         return nn.Sequential(*layers)
 
 
-    def forward(self, x):
+    def forward(self, x, extract_feature=False):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.prelu(x)
         x = self.layer1(x)
-        _ = self.feature_target_block(x)
+        x1 = x
         
         x = self.layer2(x)
-        _ = self.feature_target_block(x)
+        x2 = x
         
         x = self.layer3(x)
-        _ = self.feature_target_block(x)
+        x3 = x
         
         x = self.layer4(x)
-        _ = self.feature_target_block(x)
+        x4 = x
         
+        if self.qualnet:
+            x_recon = self.conv_bridge(x)
         
-        # Option-A
-        x = self.gp(x)
-        x = torch.flatten(x, 1)
-
+        if self.pooling == 'A':
+            # Option-A
+            x = self.gp(x)
+            x = torch.flatten(x, 1)
+            
+        elif self.pooling == 'E':
+            # Option-E
+            x = self.bn2(x)
+            x = torch.flatten(x, 1)
+            x = self.dropout(x)
+            x = self.fc(x)
+            x = self.features(x)
+        else:
+            raise('Select Proper Pooling')
         
-        # # Option-E
-        # x = self.bn2(x)
-        # x = torch.flatten(x, 1)
-        # x = self.dropout(x)
-        # x = self.fc(x)
-        # x = self.features(x)
-        return x
-
-
+        if self.qualnet:
+            if extract_feature:
+                return x, x_recon, [x1,x2,x3,x4]
+            else:
+                return x, x_recon
+        else:
+            if extract_feature:
+                return x, [x1,x2,x3,x4]
+            else:
+                return x          
+              
+            
 def _iresnet(arch, block, layers, pretrained, progress, **kwargs):
     model = IResNet(block, layers, **kwargs)
     if pretrained:

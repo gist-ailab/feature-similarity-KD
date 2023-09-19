@@ -17,8 +17,8 @@ def img_loader(path, down_size):
                 high_img = np.stack([high_img] * 3, 2)
             
             if down_size != 112:
-                down_img = cv2.resize(high_img, dsize=(down_size, down_size), interpolation=cv2.INTER_NEAREST)
-                down_img = cv2.resize(down_img, dsize=(112, 112), interpolation=cv2.INTER_NEAREST)
+                down_img = cv2.resize(high_img, dsize=(down_size, down_size), interpolation=cv2.INTER_LINEAR)
+                down_img = cv2.resize(down_img, dsize=(112, 112), interpolation=cv2.INTER_LINEAR)
             else:
                 down_img = high_img
             return high_img, down_img

@@ -53,7 +53,7 @@ def evaluation_10_fold(feature_path='./result/cur_epoch_result.mat'):
     return ACCs
 
 
-def getFeatureFromTorch(feature_save_dir, net, device, data_set, data_loader):
+def getFeatureFromTorch(feature_save_dir, net, device, data_set, data_loader, qualnet=False):
     featureLs = None
     featureRs = None
     count = 0
@@ -66,6 +66,8 @@ def getFeatureFromTorch(feature_save_dir, net, device, data_set, data_loader):
             res = []
             for d in data:
                 out = net(d)
+                if qualnet:
+                    out = out[0]
                 out = out.data.cpu().numpy()
                 res.append(out)
 

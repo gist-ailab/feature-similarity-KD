@@ -20,14 +20,14 @@ class TinyFaceTest:
         
         # Probe Lists
         self.probe_paths = get_all_files(os.path.join(tinyface_root, 'Probe'))
-        self.probe_paths = np.array(self.probe_paths).astype(np.object).flatten()
+        self.probe_paths = np.array(self.probe_paths).flatten()
 
         # Gallery Lists
         self.match_paths = get_all_files(os.path.join(tinyface_root, 'Gallery_Match'))
         self.distractor_paths = get_all_files(os.path.join(tinyface_root, 'Gallery_Distractor'))
                 
-        self.match_paths = np.array(self.match_paths).astype(np.object).flatten()
-        self.distractor_paths = np.array(self.distractor_paths).astype(np.object).flatten()
+        self.match_paths = np.array(self.match_paths).flatten()
+        self.distractor_paths = np.array(self.distractor_paths).flatten()
         self.gallery_paths = np.concatenate([self.match_paths, self.distractor_paths], axis=0)
 
 

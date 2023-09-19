@@ -7,8 +7,10 @@ import cv2
 import os
 import torch
 import random
+from collections import defaultdict
 
-def img_loader(path, down_size):
+
+def img_loader(path, down_size, interpolation_option=None):
     try:
         with open(path, 'rb') as f:
             high_img = cv2.imread(path)
@@ -16,10 +18,27 @@ def img_loader(path, down_size):
                 high_img = np.stack([high_img] * 3, 2)
             
             if down_size != 112:
-                down_img = cv2.resize(high_img, dsize=(down_size, down_size), interpolation=cv2.INTER_NEAREST)
-                down_img = cv2.resize(down_img, dsize=(112, 112), interpolation=cv2.INTER_NEAREST)
+                # Down-Sampling
+                if interpolation_option == 'random':
+                    interpolation = np.random.choice([cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_AREA, cv2.INTER_CUBIC, cv2.INTER_LANCZOS4], 1)[0]
+                elif interpolation_option == 'fix':
+                    interpolation = cv2.INTER_LINEAR
+                else:
+                    raise('Error')
+                down_img = cv2.resize(high_img, dsize=(down_size, down_size), interpolation=interpolation)
+                
+                # Up-Sampling
+                if interpolation_option == 'random':
+                    interpolation = np.random.choice([cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_AREA, cv2.INTER_CUBIC, cv2.INTER_LANCZOS4], 1)[0]
+                elif interpolation_option == 'fix':
+                    interpolation = cv2.INTER_LINEAR
+                else:
+                    raise('Error')
+                down_img = cv2.resize(down_img, dsize=(112, 112), interpolation=interpolation)
+                
             else:
                 down_img = high_img
+                
             return high_img, down_img
         
     except IOError:
@@ -27,7 +46,7 @@ def img_loader(path, down_size):
         
 
 class CASIAWebFace(data.Dataset):
-    def __init__(self, root, file_list, down_size, transform=None, loader=img_loader, flip=True, equal=True):
+    def __init__(self, root, file_list, down_size, transform=None, loader=img_loader, flip=True, equal=True, interpolation_option=None, cross_sampling=False):
         self.root = root
         self.transform = transform
         self.loader = loader
@@ -40,20 +59,36 @@ class CASIAWebFace(data.Dataset):
             img_label_list = f.read().splitlines()
         
         
-
-        for info in img_label_list:
+        self.label_dict = defaultdict(list)
+        for ind, info in enumerate(img_label_list):
             image_path, label_name = info.split('  ')
             image_list.append(image_path)
             label_list.append(int(label_name))
+            
+            self.label_dict[int(label_name)].append(ind)
 
+        self.cross_sampling = cross_sampling
         self.image_list = image_list
         self.label_list = label_list
         self.class_nums = len(np.unique(self.label_list))
 
+        self.interpolation_option = interpolation_option
+        
         self.flip = flip
         print("dataset size: ", len(self.image_list), '/', self.class_nums)
 
+
     def __getitem__(self, index):
+        HR_img, LR_img, label = self.get_samples(index)
+        if self.cross_sampling:
+            new_index = np.random.choice(self.label_dict[label], 1)[0]
+            HR_cross_img, LR_cross_img, _ = self.get_samples(new_index)
+            return HR_img, LR_img, HR_cross_img, LR_cross_img, label
+        else:
+            return HR_img, LR_img, label
+
+
+    def get_samples(self, index):
         if self.down_size == 1:
             if self.equal:
                 down_size = random.sample([14, 28, 56, 112], k=1)[0]
@@ -69,13 +104,12 @@ class CASIAWebFace(data.Dataset):
         else:
             down_size = self.down_size
         
-        
         img_path = self.image_list[index]
         ind = img_path.find('faces_webface_112x112')
         img_path = img_path[ind+28:]
 
         label = self.label_list[index]
-        HR_img, LR_img = self.loader(os.path.join(self.root, img_path), down_size)
+        HR_img, LR_img = self.loader(os.path.join(self.root, img_path), down_size, self.interpolation_option)
 
         # random flip with ratio of 0.5
         if self.flip:
