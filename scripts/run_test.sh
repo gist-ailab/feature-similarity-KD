@@ -1,9 +1,12 @@
 # Test Code (AgeDB-30)
-for PARAM in 0.0 4.0 8.0 12.0 16.0 20.0
+for MARGIN in ArcFace CosFace AdaFace
 do
-    BACKBONE=iresnet50
+    BACKBONE=iresnet18
     POOLING=E
-    python test_tinyface.py --gpus 1 --backbone $BACKBONE --pooling $POOLING --checkpoint "checkpoint/student/$BACKBONE-$POOLING-IR/resol1-random/F_SKD_CROSS-P{20.0,$PARAM}/last_net.ckpt"
+    python test_tinyface.py --gpus 1 --backbone $BACKBONE --pooling $POOLING --checkpoint "checkpoint/student/$BACKBONE-$POOLING-IR-$MARGIN/resol1-random/F_SKD_CROSS-P{20.0,4.0}/last_net.ckpt"
+    # python test_tinyface.py --gpus 1 --qualnet True --backbone $BACKBONE --pooling $POOLING --checkpoint "checkpoint/student/$BACKBONE-$POOLING-qualnet-$MARGIN/resol1-random/QualNet-pretrained{True}/last_net.ckpt"
+    # python test_tinyface.py --gpus 3 --backbone $BACKBONE --mode cbam --pooling $POOLING --checkpoint "checkpoint/student/$BACKBONE-$POOLING-CBAM-$MARGIN/resol1-random/A_SKD-P{80.0,0.0}/last_net.ckpt"
+    # python test_tinyface.py --gpus 0 --backbone $BACKBONE --pooling $POOLING --checkpoint "checkpoint/naive/$BACKBONE-$POOLING-IR-$MARGIN/resol1-random/last_net.ckpt"
 done
 
 

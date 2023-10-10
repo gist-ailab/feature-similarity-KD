@@ -68,10 +68,15 @@ def infer(model, dataloader, use_flip_test):
             images = images.to('cuda')
             feature = model(images)
             
+            if args.qualnet:
+                feature = feature[0]
+            
             if use_flip_test:
                 fliped_images = torch.flip(images, dims=[3])
                 flipped_feature = model(fliped_images.to("cuda"))
-
+                if args.qualnet:
+                    flipped_feature = flipped_feature[0]
+                    
                 fused_feature = (feature + flipped_feature) / 2
                 features.append(fused_feature.cpu().numpy())
             else:
@@ -92,9 +97,9 @@ def load_model(args):
 
     # define backbone and margin layer
     if args.backbone == 'iresnet18':
-        net = iresnet18(attention_type=args.mode, pooling=args.pooling)
+        net = iresnet18(attention_type=args.mode, pooling=args.pooling, qualnet=args.qualnet)
     elif args.backbone == 'iresnet50':
-        net = iresnet50(attention_type=args.mode, pooling=args.pooling)
+        net = iresnet50(attention_type=args.mode, pooling=args.pooling, qualnet=args.qualnet)
         
     net.load_state_dict(torch.load(args.checkpoint_path)['net_state_dict'])
 
@@ -145,6 +150,7 @@ if __name__ == '__main__':
     parser.add_argument('--pooling', type=str, default='A') #
     parser.add_argument('--checkpoint_path', type=str, default='checkpoint/naive/iresnet50-E-IR/resol1-random/last_net.ckpt', help='scale size')
     parser.add_argument('--use_flip_test', type=str2bool, default='True')
+    parser.add_argument('--qualnet', type=str2bool, default='False')
     args = parser.parse_args()
     
     args.save_dir = os.path.join(os.path.dirname(args.checkpoint_path), 'tinyface_result')
