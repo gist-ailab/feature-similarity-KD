@@ -50,6 +50,9 @@ This is the following study of our previous study [Teaching Where to Look (ECCV 
         $FACE_DIR is the absolute path of 'Face' folder
         ```bash
             ## require install mxnet (pip install mxnet-cpu)
+
+            pip3 install mxnet-mkl==1.6.0 numpy==1.23.1
+
             # 1. Evaluation Set (AgeDB-30)
             python utility/load_images_from_bin.py --data_type evaluation --data_dir $FACE_DIR
             

@@ -67,8 +67,9 @@ def generate_dataset_list(dataset_path,dataset_list):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
-    parser.add_argument('--data_dir', type=str, default='/data/sung/dataset/Face')
-    parser.add_argument('--data_type', type=str, default='evaluation', help='train or evaluation')
+    parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset')
+    parser.add_argument('--data_name', type=str, default='faces_vgg_112x112')
+    parser.add_argument('--data_type', type=str, default='train', help='train or evaluation')
     args = parser.parse_args()
     
     data_type = args.data_type
@@ -91,11 +92,11 @@ if __name__=='__main__':
         load_image_from_bin(bin_path, save_dir, name)
 
     elif data_type == 'train':
-        rec_path = os.path.join(data_dir, 'casia_webface_112x112')
+        rec_path = os.path.join(data_dir, args.data_name)
         load_mx_rec(rec_path)
         
-        dataset = os.path.join(data_dir, 'casia_webface_112x112', 'image')
-        list = os.path.join(data_dir, 'casia_webface_112x112', 'train.list')
+        dataset = os.path.join(data_dir, args.data_name, 'image')
+        list = os.path.join(data_dir, args.data_name, 'train.list')
         generate_dataset_list(dataset, list)
     
     else:

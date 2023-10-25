@@ -45,9 +45,10 @@ def img_loader(path, down_size, interpolation_option=None):
         print('Cannot load image ' + path)
         
 
-class CASIAWebFace(data.Dataset):
-    def __init__(self, root, file_list, down_size, transform=None, loader=img_loader, flip=True, equal=True, interpolation_option=None, cross_sampling=False):
+class FaceDataset(data.Dataset):
+    def __init__(self, root, data_type, file_list, down_size, transform=None, loader=img_loader, flip=True, equal=True, interpolation_option=None, cross_sampling=False):
         self.root = root
+        self.data_type = data_type
         self.transform = transform
         self.loader = loader
         self.down_size = down_size
@@ -105,8 +106,15 @@ class CASIAWebFace(data.Dataset):
             down_size = self.down_size
         
         img_path = self.image_list[index]
-        ind = img_path.find('faces_webface_112x112')
-        img_path = img_path[ind+28:]
+
+        if self.data_type == 'casia':
+            ind = img_path.find('faces_webface_112x112')
+            img_path = img_path[ind+28:]
+        elif self.data_type == 'ms1mv2':
+            ind = img_path.find('faces_emore')
+            img_path = img_path[ind+18:]
+        else:
+            raise('Error!')
 
         label = self.label_list[index]
         HR_img, LR_img = self.loader(os.path.join(self.root, img_path), down_size, self.interpolation_option)

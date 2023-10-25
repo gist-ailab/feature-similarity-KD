@@ -13,7 +13,7 @@ from margin.CosineMarginProduct import CosineMarginProduct
 from margin.AdaMarginProduct import AdaMarginProduct
 
 from utility.log import init_log
-from dataset.casia_webface import CASIAWebFace
+from dataset.train_dataset import FaceDataset
 from dataset.agedb import AgeDB30
 from dataset.cfp import CFP_FP
 from dataset.lfw import LFW
@@ -61,10 +61,9 @@ def train(args):
     ])
 
     # validation dataset
-    trainset = CASIAWebFace(args.train_root, args.train_file_list, args.down_size, transform=transform, equal=args.equal, interpolation_option=args.interpolation)
+    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, equal=args.equal, interpolation_option=args.interpolation)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=False)
     
-
     # define backbone and margin layer
     if args.backbone == 'iresnet50':
         net = iresnet50(attention_type=args.mode, pooling=args.pooling)
@@ -88,7 +87,28 @@ def train(args):
         {'params': net.parameters(), 'weight_decay': 5e-4},
         {'params': margin.parameters(), 'weight_decay': 5e-4}
     ], lr=0.1, momentum=0.9, nesterov=True)
-    exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[18000, 28000, 36000, 44000], gamma=0.1)
+
+
+    if args.dataset == 'casia':
+        finish_iters = 47000
+        exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[18000, 28000, 36000, 44000], gamma=0.1)
+    
+    elif args.dataset == 'vggface':
+        if args.margin_type == 'AdaFace':
+            finish_iters = (6128 * 26)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[6128 * 12, 6128 * 20, 6128 * 24], gamma=0.1)
+        else:
+            finish_iters = (6128 * 24)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[6128 * 10, 6128 * 18, 6128 * 22], gamma=0.1)
+    
+    elif args.dataset == 'ms1mv2':
+        if args.margin_type == 'AdaFace':
+            finish_iters = (11373 * 26)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[11373 * 12, 11373 * 20, 11373 * 24], gamma=0.1)
+        else:
+            finish_iters = (11373 * 24)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[11373 * 10, 11373 * 18, 11373 * 22], gamma=0.1)
+
 
     if multi_gpus:
         net = DataParallel(net).to(device)
@@ -126,7 +146,6 @@ def train(args):
             optimizer_ft.zero_grad()
             total_loss.backward()
             optimizer_ft.step()
-
 
             # print train information
             if total_iters % 100 == 0:
@@ -169,7 +188,7 @@ def train(args):
             exp_lr_scheduler.step()
             
             # Stop
-            if total_iters == 47000:
+            if total_iters == finish_iters:
                 GOING = False
                 break
         
@@ -255,11 +274,12 @@ def train(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
-    parser.add_argument('--data_dir', type=str, default='Face/')
-    parser.add_argument('--save_dir', type=str, default='checkpoint/teacher/iResNet50-IR', help='model save dir')
-    parser.add_argument('--down_size', type=int, default=0) # 1 : all type, 0 : high, others : low
-    parser.add_argument('--interpolation', type=str) # 
-    parser.add_argument('--pooling', type=str, default='A') #
+    parser.add_argument('--dataset', type=str, default='ms1mv2')
+    parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset')
+    parser.add_argument('--save_dir', type=str, default='imp/', help='model save dir')
+    parser.add_argument('--down_size', type=int, default=1) # 1 : all type, 0 : high, others : low
+    parser.add_argument('--interpolation', type=str, default='random') # 
+    parser.add_argument('--pooling', type=str, default='E') #
 
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--backbone', type=str, default='iresnet50')
@@ -274,8 +294,15 @@ if __name__ == '__main__':
 
 
     # Path
-    args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
-    args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train.list')
+    if args.dataset == 'casia':
+        args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
+        args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train.list')
+    elif args.dataset == 'ms1mv2':
+        args.train_root = os.path.join(args.data_dir, 'faces_emore/image')
+        args.train_file_list = os.path.join(args.data_dir, 'faces_emore/train.list')
+    else:
+        raise('Select Proper Dataset')
+
     args.lfw_test_root = os.path.join(args.data_dir, 'evaluation/lfw')
     args.lfw_file_list = os.path.join(args.data_dir, 'evaluation/lfw.txt')
     args.agedb_test_root = os.path.join(args.data_dir, 'evaluation/agedb_30')
