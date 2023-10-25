@@ -71,6 +71,7 @@ def train(args):
                                               shuffle=True, num_workers=8, drop_last=False)
     
 
+
     # define backbone and margin layer
     if args.backbone == 'iresnet50':
         net = iresnet50(attention_type=args.mode, pooling=args.pooling)
