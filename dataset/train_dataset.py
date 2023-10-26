@@ -113,6 +113,9 @@ class FaceDataset(data.Dataset):
         elif self.data_type == 'ms1mv2':
             ind = img_path.find('faces_emore')
             img_path = img_path[ind+18:]
+        elif self.data_type == 'vggface':
+            ind = img_path.find('faces_vgg_112x112')
+            img_path = img_path[ind+24:]
         else:
             raise('Error!')
 

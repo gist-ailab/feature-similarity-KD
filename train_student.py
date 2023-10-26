@@ -455,13 +455,16 @@ if __name__ == '__main__':
     args.cross_sampling = False
     
 
-    # Path
+    # PATH
     if args.dataset == 'casia':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train.list')
     elif args.dataset == 'ms1mv2':
         args.train_root = os.path.join(args.data_dir, 'faces_emore/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_emore/train.list')
+    elif args.dataset == 'vggface':
+        args.train_root = os.path.join(args.data_dir, 'faces_vgg_112x112/image')
+        args.train_file_list = os.path.join(args.data_dir, 'faces_vgg_112x112/train.list')
     else:
         raise('Select Proper Dataset')
     

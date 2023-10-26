@@ -4,8 +4,8 @@ do
     RESOLUTION=0
     BACKBONE=iresnet50
     POOLING=E
-    python train_teacher.py --seed 5 --gpus 0,1 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-ms1mv2/$BACKBONE-$POOLING-IR-$MARGIN/ \
-                            --down_size $RESOLUTION --mode ir --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE --dataset ms1mv2 --batch_size 512
+    python train_teacher.py --seed 5 --gpus 4,5 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-vggface/$BACKBONE-$POOLING-IR-$MARGIN/ \
+                            --down_size $RESOLUTION --mode ir --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE --dataset vggface --batch_size 512
 done
 
 
@@ -17,8 +17,8 @@ do
         RESOLUTION=1
         POOLING=E
         INTERPOLATION=random
-        python train_teacher.py --seed 5 --gpus 2,3 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/naive-ms1mv2/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION \
-                                --backbone $BACKBONE --down_size $RESOLUTION --pooling $POOLING --interpolation $INTERPOLATION --mode ir --margin_type $MARGIN --dataset ms1mv2 --batch_size 512
+        python train_teacher.py --seed 5 --gpus 6,7 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/naive-vggface/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION \
+                                --backbone $BACKBONE --down_size $RESOLUTION --pooling $POOLING --interpolation $INTERPOLATION --mode ir --margin_type $MARGIN --dataset vggface --batch_size 512
     done
 done
 

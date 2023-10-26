@@ -274,7 +274,7 @@ def train(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
-    parser.add_argument('--dataset', type=str, default='ms1mv2')
+    parser.add_argument('--dataset', type=str, default='vggface')
     parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset')
     parser.add_argument('--save_dir', type=str, default='imp/', help='model save dir')
     parser.add_argument('--down_size', type=int, default=1) # 1 : all type, 0 : high, others : low
@@ -289,7 +289,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
     parser.add_argument('--equal', type=lambda x: x.lower()=='true', default=True)
-    parser.add_argument('--gpus', type=str, default='0', help='model prefix')
+    parser.add_argument('--gpus', type=str, default='5', help='model prefix')
     args = parser.parse_args()
 
 
@@ -300,6 +300,9 @@ if __name__ == '__main__':
     elif args.dataset == 'ms1mv2':
         args.train_root = os.path.join(args.data_dir, 'faces_emore/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_emore/train.list')
+    elif args.dataset == 'vggface':
+        args.train_root = os.path.join(args.data_dir, 'faces_vgg_112x112/image')
+        args.train_file_list = os.path.join(args.data_dir, 'faces_vgg_112x112/train.list')
     else:
         raise('Select Proper Dataset')
 
