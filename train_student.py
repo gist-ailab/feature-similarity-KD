@@ -11,6 +11,7 @@ from torch.nn import DataParallel
 from margin.ArcMarginProduct import ArcMarginProduct
 from margin.CosineMarginProduct import CosineMarginProduct
 from margin.AdaMarginProduct import AdaMarginProduct
+from margin.MagMarginProduct import MagMarginProduct, MagLoss
 from utility.log import init_log
 from dataset.train_dataset import FaceDataset
 from dataset.agedb import AgeDB30
@@ -84,6 +85,8 @@ def train(args):
         margin = CosineMarginProduct(args.feature_dim, trainset.class_nums)
     elif args.margin_type == 'AdaFace':
         margin = AdaMarginProduct(args.feature_dim, trainset.class_nums)
+    elif args.margin_type == 'MagFace':
+        margin = MagMarginProduct(args.feature_dim, trainset.class_nums)
     else:
         print(args.margin_type, 'is not available!')
 
@@ -112,7 +115,11 @@ def train(args):
 
 
     # define optimizers for different layer
-    criterion = torch.nn.CrossEntropyLoss().to(device)
+    if args.margin_type == 'MagFace':
+        criterion = MagLoss().to(device)
+    else:
+        criterion = torch.nn.CrossEntropyLoss().to(device)
+
     optimizer_ft = optim.SGD([
         {'params': net.parameters(), 'weight_decay': 5e-4},
         {'params': margin.parameters(), 'weight_decay': 5e-4}
@@ -190,13 +197,14 @@ def train(args):
                 LR_manager.attention = []
                 HR_manager.attention = []
                 
-                
             # High-Resolution Forward
             with torch.no_grad():
                 HR_logits, HR_feat_list = aux_net(HR_img, extract_feature=True)
                 if args.margin_type == 'AdaFace':
                     HR_norm = torch.norm(HR_logits, 2, 1, True)
                     HR_out = margin(HR_logits, HR_norm, label)
+                elif args.margin_type == 'MagFace':
+                    HR_out, _ = margin(HR_logits)
                 else:
                     HR_out = aux_margin(HR_logits, label)
             
@@ -205,10 +213,12 @@ def train(args):
             if args.margin_type == 'AdaFace':
                 LR_norm = torch.norm(LR_logits, 2, 1, True)
                 LR_out = margin(LR_logits, LR_norm, label)
+            elif args.margin_type == 'MagFace':
+                LR_out, LR_norm = margin(LR_logits)    
             else:
                 LR_out = margin(LR_logits, label)
-            
-            
+
+
             # multi-gpu settings
             if multi_gpus and hook:
                 HR_imp, LR_imp = [], []
@@ -242,8 +252,13 @@ def train(args):
             correct_index = torch.ones(B).bool()
                 
             # Recognition Loss
-            cri_loss = criterion(LR_out, label)
-            
+            if args.margin_type == 'MagFace':
+                soft_loss, loss_g, LR_out = criterion(LR_out, label, LR_norm)
+                cri_loss = soft_loss + loss_g * 20.0
+            else:
+                cri_loss = criterion(LR_out, label)
+
+
             # Distillation
             distill_param = list(map(float, args.distill_param.split(',')))
 
@@ -277,7 +292,6 @@ def train(args):
             cross_loss = 0.    
             if distill_param[1] > 0.:
                 # cross_loss += cross_kd()(LR_feat_list[-1][correct_index], LR_pos_feat_list[-1][correct_index], HR_feat_list[-1][correct_index], HR_pos_feat_list[-1][correct_index]) 
-                
                 new_correct_index = list(range(torch.sum(correct_index).item()))
                 random.shuffle(new_correct_index)
                 cross_loss += cross_kd()(LR_feat_list[-1][correct_index], LR_feat_list[-1][correct_index][new_correct_index], HR_feat_list[-1][correct_index], HR_feat_list[-1][correct_index][new_correct_index])    

@@ -11,7 +11,7 @@ from backbone.iresnet import iresnet18, iresnet50
 from margin.ArcMarginProduct import ArcMarginProduct
 from margin.CosineMarginProduct import CosineMarginProduct
 from margin.AdaMarginProduct import AdaMarginProduct
-
+from margin.MagMarginProduct import MagMarginProduct, MagLoss
 from utility.log import init_log
 from dataset.train_dataset import FaceDataset
 from dataset.agedb import AgeDB30
@@ -77,12 +77,18 @@ def train(args):
         margin = CosineMarginProduct(args.feature_dim, trainset.class_nums)
     elif args.margin_type == 'AdaFace':
         margin = AdaMarginProduct(args.feature_dim, trainset.class_nums)
+    elif args.margin_type == 'MagFace':
+        margin = MagMarginProduct(args.feature_dim, trainset.class_nums)
     else:
         print(args.margin_type, 'is not available!')
 
     
     # define optimizers for different layer
-    criterion = torch.nn.CrossEntropyLoss().to(device)
+    if args.margin_type == 'MagFace':
+        criterion = MagLoss().to(device)
+    else:
+        criterion = torch.nn.CrossEntropyLoss().to(device)
+
     optimizer_ft = optim.SGD([
         {'params': net.parameters(), 'weight_decay': 5e-4},
         {'params': margin.parameters(), 'weight_decay': 5e-4}
@@ -134,12 +140,18 @@ def train(args):
             if args.margin_type == 'AdaFace':
                 norm = torch.norm(raw_logits, 2, 1, True)
                 out = margin(raw_logits, norm, label)
+            elif args.margin_type == 'MagFace':
+                out, norm = margin(raw_logits)
             else:
                 out = margin(raw_logits, label)
             
             # Loss
-            cri_loss = criterion(out, label)
-            total_loss = cri_loss
+            if args.margin_type == 'MagFace':
+                cri_loss, loss_g, out = criterion(out, label, norm)
+                total_loss = cri_loss + loss_g * 20.0
+            else:
+                cri_loss = criterion(out, label)
+                total_loss = cri_loss
 
 
             # Optim
