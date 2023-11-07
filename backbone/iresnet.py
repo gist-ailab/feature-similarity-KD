@@ -10,6 +10,24 @@ def at(x):
     return F.normalize(x.pow(2).mean(1))
 
 
+class HintLayer(nn.Module):
+    def __init__(self, inplane, planes, bn=False):
+        super(HintLayer, self).__init__()
+        self.hint = nn.Conv2d(inplane, planes, stride=1, kernel_size=1, padding=0, bias=False)
+
+        if bn:
+            self.bn = nn.BatchNorm2d(planes, eps=1e-05,)
+        else:
+            self.bn = None
+        
+    def forward(self, x):
+        out = self.hint(x)
+        if self.bn is not None:
+            out = self.bn(out)
+        return out
+    
+    
+
 class target(nn.Module): 
     def __init__(self, feat_type='feature'):
         super(target, self).__init__()
@@ -110,13 +128,13 @@ class IResNet(nn.Module):
     fc_scale = 7 * 7
     def __init__(self,
                  block, layers, pooling, dropout=0, num_features=512, zero_init_residual=False,
-                 groups=1, width_per_group=64, replace_stride_with_dilation=None, attention_type='ir', qualnet=False):
+                 groups=1, width_per_group=64, replace_stride_with_dilation=None, attention_type='ir', qualnet=False, student=False):
         super(IResNet, self).__init__()
         self.extra_gflops = 0.0
         self.inplanes = 64
         self.dilation = 1
         self.attention_type = attention_type
-        self.qualnet = qualnet
+        self.qualnet = qualnet        
         
         if replace_stride_with_dilation is None:
             replace_stride_with_dilation = [False, False, False]
@@ -144,6 +162,15 @@ class IResNet(nn.Module):
                                        layers[3],
                                        stride=2,
                                        dilate=replace_stride_with_dilation[2])
+
+        self.student = student
+        if self.student:
+            self.hint_layer1 = HintLayer(self.layer1[0].conv1.out_channels, self.layer1[0].conv1.out_channels, bn=True)
+            self.hint_layer2 = HintLayer(self.layer2[0].conv1.out_channels, self.layer2[0].conv1.out_channels, bn=True)
+            self.hint_layer3 = HintLayer(self.layer3[0].conv1.out_channels, self.layer3[0].conv1.out_channels, bn=True)
+            self.hint_layer4 = HintLayer(self.layer4[0].conv1.out_channels, self.layer4[0].conv1.out_channels, bn=True)
+        else:
+            self.hint_layer1, self.hint_layer2, self.hint_layer3, self.hint_layer4 = None, None, None, None
         
         self.feature_target_block = target()
         self.pooling = pooling
@@ -212,16 +239,33 @@ class IResNet(nn.Module):
         x = self.bn1(x)
         x = self.prelu(x)
         x = self.layer1(x)
-        x1 = x
         
+        if self.hint_layer1 is None:
+            x1 = x
+        else:
+            x1 = self.hint_layer1(x)
+            
+            
         x = self.layer2(x)
-        x2 = x
+        if self.hint_layer2 is None:
+            x2 = x
+        else:
+            x2 = self.hint_layer2(x)
+            
         
         x = self.layer3(x)
-        x3 = x
-        
+        if self.hint_layer3 is None:
+            x3 = x
+        else:
+            x3 = self.hint_layer3(x)
+            
+                    
         x = self.layer4(x)
-        x4 = x
+        if self.hint_layer4 is None:
+            x4 = x
+        else:
+            x4 = self.hint_layer4(x)
+            
         
         if self.qualnet:
             x_recon = self.conv_bridge(x)

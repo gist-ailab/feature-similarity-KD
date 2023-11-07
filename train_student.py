@@ -70,13 +70,11 @@ def train(args):
     trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, equal=args.equal, interpolation_option=args.interpolation, cross_sampling=args.cross_sampling)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8, drop_last=False)
 
-
     # define backbone and margin layer
     if args.backbone == 'iresnet50':
-        net = iresnet50(attention_type=args.mode, pooling=args.pooling)
+        net = iresnet50(attention_type=args.mode, pooling=args.pooling, student=True)
     elif args.backbone == 'iresnet18':
-        net = iresnet18(attention_type=args.mode, pooling=args.pooling)
-
+        net = iresnet18(attention_type=args.mode, pooling=args.pooling, student=True)
 
     # Margin
     if args.margin_type == 'ArcFace':
@@ -124,7 +122,7 @@ def train(args):
         {'params': net.parameters(), 'weight_decay': 5e-4},
         {'params': margin.parameters(), 'weight_decay': 5e-4}
     ], lr=0.1, momentum=0.9, nesterov=True)
-    exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[18000, 28000, 36000, 44000], gamma=0.1)
+
 
     if multi_gpus:
         net = DataParallel(net).to(device)
@@ -237,13 +235,6 @@ def train(args):
                 del HR_imp, LR_imp
             
             
-            # # positive sampling            
-            # if args.cross_sampling:
-            #     with torch.no_grad():
-            #         _, HR_pos_feat_list = aux_net(HR_pos_img, extract_feature=True)
-            #     _, LR_pos_feat_list = net(LR_pos_img, extract_feature=True)
-                
-
             # Sample choice for distillation            
             # _, predict = torch.max(HR_out.data, 1)
             # correct_index = (predict == label)
@@ -449,20 +440,20 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='ir', help='attention type', choices=['ir', 'cbam'])
     parser.add_argument('--backbone', type=str, default='iresnet50')
     
-    parser.add_argument('--interpolation', type=str)
-    parser.add_argument('--pooling', type=str, default='A')
+    parser.add_argument('--interpolation', type=str, default='random')
+    parser.add_argument('--pooling', type=str, default='E')
     
     parser.add_argument('--margin_type', type=str, default='CosFace', help='ArcFace, CosFace, SphereFace, MultiMargin, Softmax')
     parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
     parser.add_argument('--equal', type=lambda x: x.lower()=='true', default=True)
-    parser.add_argument('--gpus', type=str, default='5', help='model prefix')
+    parser.add_argument('--gpus', type=str, default='0', help='model prefix')
     parser.add_argument('--seed', type=int, default=1)
     
     parser.add_argument('--distill_param', type=str, default='1.0,1.0', help='hyperparams for distillation loss')
     parser.add_argument('--distill_type', type=str, default='F_SKD_BLOCK', help='distillation types')
-    parser.add_argument('--teacher_path', type=str, default='checkpoint/teacher/iresnet50-A-IR/last_net.ckpt')
+    parser.add_argument('--teacher_path', type=str, default='checkpoint/teacher-casia/iresnet50-E-IR-CosFace/last_net.ckpt')
     args = parser.parse_args()
 
     # args.cross_sampling = 'cross' in args.distill_type.lower()
