@@ -109,6 +109,7 @@ def selection(args):
         for margin in [0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
             index = torch.where(similarity_ii > margin)[0]
             out_dict['pos_m{%.1f}' %margin] = gt_index[index].tolist()
+        
         result.append(out_dict)
     
     with open(os.path.join(os.path.dirname(args.teacher_path), 'cross_dict.pkl'), 'wb') as f:

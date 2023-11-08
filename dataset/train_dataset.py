@@ -69,7 +69,7 @@ class FaceDataset(data.Dataset):
 
         self.margin = margin
         if cross_sampling:
-            with open(os.path.join(teacher_folder, 'cross_dict.npz'), 'rb') as f:
+            with open(os.path.join(teacher_folder, 'cross_dict.pkl'), 'rb') as f:
                 self.cross_dict = pickle.load(f)
         else:
             self.cross_dict = None
@@ -89,7 +89,7 @@ class FaceDataset(data.Dataset):
         if self.cross_dict is None:
             return HR_img, LR_img, label
         else:
-            pos_list = self.cross_dict['pos_m{%.1f}'%self.margin][index]
+            pos_list = self.cross_dict[index]['pos_m{%.1f}' %self.margin]
             if len(pos_list) == 0:
                 HR_pos_img, LR_pos_img = HR_img, LR_img
                 correct_index = torch.tensor(0)
