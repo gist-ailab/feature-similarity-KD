@@ -51,6 +51,7 @@ def train(args):
     # log init
     save_dir = args.save_dir
     os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.save_dir, 'result'), exist_ok=True)
     logging = init_log(save_dir)
     _print = logging.info
 
@@ -98,7 +99,11 @@ def train(args):
     if args.dataset == 'casia':
         finish_iters = 47000
         exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[18000, 28000, 36000, 44000], gamma=0.1)
-    
+
+    elif args.dataset == 'mini_casia':
+        finish_iters = 24000
+        exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[9000, 14000, 18000, 22000], gamma=0.1)
+
     elif args.dataset == 'vggface':
         if args.margin_type == 'AdaFace':
             finish_iters = (6128 * 26)
@@ -244,49 +249,124 @@ def train(args):
     else: 
         eval_list = [args.down_size]
         
-    average_age = 0.
-    average_cfp = 0.
-    average_lfw = 0.
-    for down_size in eval_list:
-        agedbdataset = AgeDB30(args.agedb_test_root, args.agedb_file_list, down_size, transform=transform)
-        cfpfpdataset = CFP_FP(args.cfpfp_test_root, args.cfpfp_file_list, down_size, transform=transform)
-        lfwdataset = LFW(args.lfw_test_root, args.lfw_file_list, down_size, transform=transform)
-        
-        agedbloader = torch.utils.data.DataLoader(agedbdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
-        cfpfploader = torch.utils.data.DataLoader(cfpfpdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
-        lfwloader = torch.utils.data.DataLoader(lfwdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+    result_dict = {}
 
-        # test model on AgeDB30
-        getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_agedb30_result.mat'), net, device, agedbdataset, agedbloader)
-        age_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_agedb30_result.mat'))
-        _print('Evaluation Result on AgeDB-30 %dX - %.2f' %(down_size, np.mean(age_accs) * 100))
+    if 'mini' in args.dataset:
+        average_mini = 0.
+        for down_size in eval_list:
+            valdataset =  FaceDataset(args.train_root, args.dataset, args.val_file_list, down_size, transform=transform, 
+                                  equal=args.equal, interpolation_option='fix', teacher_folder='', cross_sampling=False, margin=0.0)
+            valloader = torch.utils.data.DataLoader(valdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
 
-        # test model on CFP-FP
-        getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_cfpfp_result.mat'), net, device, cfpfpdataset, cfpfploader)
-        cfp_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_cfpfp_result.mat'))
-        _print('Evaluation Result on CFP-ACC %dX - %.2f' %(down_size, np.mean(cfp_accs) * 100))
-        
-        # test model on LFW
-        getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_lfw_result.mat'), net, device, lfwdataset, lfwloader)
-        lfw_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_lfw_result.mat'))
-        _print('Evaluation Result on LFW-ACC %dX - %.2f' %(down_size, np.mean(lfw_accs) * 100))
+            correct, total = 0, 0
+            for data in tqdm(valloader):            
+                LR_img, label = data[1].to(device), data[2].to(device)
+                
+                with torch.no_grad():
+                    LR_logits, LR_feat_list = net(LR_img, extract_feature=True)
 
-        # Average
-        average_age += np.mean(age_accs) * 100
-        average_cfp += np.mean(cfp_accs) * 100
-        average_lfw += np.mean(lfw_accs) * 100
-        
-        
-    if len(eval_list) > 1:
-        _print('average - age_accs : %.2f' %(average_age / len(eval_list)))
-        _print('average - cfp_accs : %.2f' %(average_cfp / len(eval_list)))
-        _print('average - lfw_accs : %.2f' %(average_lfw / len(eval_list)))
+                    if args.margin_type == 'AdaFace':
+                        LR_norm = torch.norm(LR_logits, 2, 1, True)
+                        LR_out = margin(LR_logits, LR_norm, label)
+                    elif args.margin_type == 'MagFace':
+                        LR_out, LR_norm = margin(LR_logits)    
+                    else:
+                        LR_out = margin(LR_logits, label)
 
+                # current training accuracy
+                _, predict = torch.max(LR_out.data, 1)
+                
+                total += label.size(0)
+                correct += (np.array(predict.cpu()) == np.array(label.data.cpu())).sum()
+            
+            result_dict['%s_%dX' %(args.dataset, down_size)] = float(100 * correct / total)
+            _print('Evaluation Result on %s %dX - %.2f' %(args.dataset, down_size, 100 * correct / total))
+            average_mini += 100 * correct / total
+
+        if len(eval_list) > 1:
+            result_dict['%s_avg' %args.dataset] = float(average_mini / len(eval_list))
+            _print('average - %s : %.2f' %(args.dataset, average_mini / len(eval_list)))  
+
+        np.savez(os.path.join(args.save_dir, 'result', 'mini_result.npz'), **result_dict)
+        
+    else:
+        for cross_resolution in [False, True]:
+            average_age = 0.
+            average_cfp = 0.
+            average_lfw = 0.
+
+            if cross_resolution:
+                _print('Cross Resolution Evaluation')
+            else:
+                _print('Single Resolution Evaluation')
+
+            for down_size in eval_list:
+                agedbdataset = AgeDB30(args.agedb_test_root, args.agedb_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
+                cfpfpdataset = CFP_FP(args.cfpfp_test_root, args.cfpfp_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
+                lfwdataset = LFW(args.lfw_test_root, args.lfw_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
+                
+                agedbloader = torch.utils.data.DataLoader(agedbdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+                cfpfploader = torch.utils.data.DataLoader(cfpfpdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+                lfwloader = torch.utils.data.DataLoader(lfwdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+
+                # test model on AgeDB30
+                getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_agedb30_result.mat'), net, device, agedbdataset, agedbloader)
+                age_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_agedb30_result.mat'))
+                _print('Evaluation Result on AgeDB-30 %dX - %.2f' %(down_size, np.mean(age_accs) * 100))
+
+                if cross_resolution:
+                    result_dict['agedb_cross_%dX' %down_size] = float(np.mean(age_accs) * 100)
+                else:
+                    result_dict['agedb_%dX' %down_size] = float(np.mean(age_accs) * 100)
+
+                # test model on CFP-FP
+                getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_cfpfp_result.mat'), net, device, cfpfpdataset, cfpfploader)
+                cfp_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_cfpfp_result.mat'))
+                _print('Evaluation Result on CFP-ACC %dX - %.2f' %(down_size, np.mean(cfp_accs) * 100))
+
+                if cross_resolution:
+                    result_dict['cfpfp_cross_%dX' %down_size] = float(np.mean(cfp_accs) * 100)
+                else:
+                    result_dict['cfpfp_%dX' %down_size] = float(np.mean(cfp_accs) * 100)
+
+                # test model on LFW
+                getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_lfw_result.mat'), net, device, lfwdataset, lfwloader)
+                lfw_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_lfw_result.mat'))
+                _print('Evaluation Result on LFW-ACC %dX - %.2f' %(down_size, np.mean(lfw_accs) * 100))
+
+                if cross_resolution:
+                    result_dict['lfw_cross_%dX' %down_size] = float(np.mean(lfw_accs) * 100)
+                else:
+                    result_dict['lfw_%dX' %down_size] = float(np.mean(lfw_accs) * 100)
+
+                # Average
+                average_age += np.mean(age_accs) * 100
+                average_cfp += np.mean(cfp_accs) * 100
+                average_lfw += np.mean(lfw_accs) * 100
+                
+                
+            if len(eval_list) > 1:
+                _print('average - age_accs : %.2f' %(average_age / len(eval_list)))
+                _print('average - cfp_accs : %.2f' %(average_cfp / len(eval_list)))
+                _print('average - lfw_accs : %.2f' %(average_lfw / len(eval_list)))
+
+                if cross_resolution:
+                    result_dict['agedb_cross_avg'] = float(average_age / len(eval_list))
+                    result_dict['cfpfp_cross_avg'] = float(average_cfp / len(eval_list))
+                    result_dict['lfw_cross_avg'] = float(average_lfw / len(eval_list))
+                else:
+                    result_dict['agedb_avg'] = float(average_age / len(eval_list))
+                    result_dict['cfpfp_avg'] = float(average_cfp / len(eval_list))
+                    result_dict['lfw_avg'] = float(average_lfw / len(eval_list))
+
+            _print('------------------------------------------------------------')
+        
+        np.savez(os.path.join(args.save_dir, 'result', 'main_result.npz'), **result_dict)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
-    parser.add_argument('--dataset', type=str, default='vggface')
+    parser.add_argument('--dataset', type=str, default='casia')
     parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset')
     parser.add_argument('--save_dir', type=str, default='imp/', help='model save dir')
     parser.add_argument('--down_size', type=int, default=1) # 1 : all type, 0 : high, others : low
@@ -309,6 +389,12 @@ if __name__ == '__main__':
     if args.dataset == 'casia':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train.list')
+
+    elif args.dataset == 'mini_casia':
+        args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
+        args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train_mini.list')
+        args.val_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/val_mini.list')
+
     elif args.dataset == 'ms1mv2':
         args.train_root = os.path.join(args.data_dir, 'faces_emore/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_emore/train.list')

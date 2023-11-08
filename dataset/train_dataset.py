@@ -8,7 +8,7 @@ import os
 import torch
 import random
 from collections import defaultdict
-
+import pickle
 
 def img_loader(path, down_size, interpolation_option=None):
     try:
@@ -46,7 +46,7 @@ def img_loader(path, down_size, interpolation_option=None):
         
 
 class FaceDataset(data.Dataset):
-    def __init__(self, root, data_type, file_list, down_size, transform=None, loader=img_loader, flip=True, equal=True, interpolation_option=None, cross_sampling=False):
+    def __init__(self, root, data_type, file_list, down_size, transform=None, loader=img_loader, flip=True, equal=True, interpolation_option=None, teacher_folder='', cross_sampling=False, margin=0.0):
         self.root = root
         self.data_type = data_type
         self.transform = transform
@@ -59,7 +59,6 @@ class FaceDataset(data.Dataset):
         with open(file_list) as f:
             img_label_list = f.read().splitlines()
         
-        
         self.label_dict = defaultdict(list)
         for ind, info in enumerate(img_label_list):
             image_path, label_name = info.split('  ')
@@ -68,7 +67,13 @@ class FaceDataset(data.Dataset):
             
             self.label_dict[int(label_name)].append(ind)
 
-        self.cross_sampling = cross_sampling
+        self.margin = margin
+        if cross_sampling:
+            with open(os.path.join(teacher_folder, 'cross_dict.npz'), 'rb') as f:
+                self.cross_dict = pickle.load(f)
+        else:
+            self.cross_dict = None
+
         self.image_list = image_list
         self.label_list = label_list
         self.class_nums = len(np.unique(self.label_list))
@@ -81,12 +86,18 @@ class FaceDataset(data.Dataset):
 
     def __getitem__(self, index):
         HR_img, LR_img, label = self.get_samples(index)
-        if self.cross_sampling:
-            new_index = np.random.choice(self.label_dict[label], 1)[0]
-            HR_cross_img, LR_cross_img, _ = self.get_samples(new_index)
-            return HR_img, LR_img, HR_cross_img, LR_cross_img, label
-        else:
+        if self.cross_dict is None:
             return HR_img, LR_img, label
+        else:
+            pos_list = self.cross_dict['pos_m{%.1f}'%self.margin][index]
+            if len(pos_list) == 0:
+                HR_pos_img, LR_pos_img = HR_img, LR_img
+                correct_index = torch.tensor(0)
+            else:
+                pos_index = np.random.choice(pos_list, 1, replace=False)[0]
+                HR_pos_img, LR_pos_img, _ = self.get_samples(int(pos_index))
+                correct_index = torch.tensor(1)
+            return HR_img, LR_img, HR_pos_img, LR_pos_img, correct_index, label
 
 
     def get_samples(self, index):
@@ -102,18 +113,19 @@ class FaceDataset(data.Dataset):
 
         elif self.down_size == 0:
             down_size = 112
+            
         else:
             down_size = self.down_size
         
         img_path = self.image_list[index]
 
-        if self.data_type == 'casia':
+        if 'casia' in self.data_type:
             ind = img_path.find('faces_webface_112x112')
             img_path = img_path[ind+28:]
-        elif self.data_type == 'ms1mv2':
+        elif 'ms1mv2' in self.data_type:
             ind = img_path.find('faces_emore')
             img_path = img_path[ind+18:]
-        elif self.data_type == 'vggface':
+        elif 'vggface' in self.data_type:
             ind = img_path.find('faces_vgg_112x112')
             img_path = img_path[ind+24:]
         else:

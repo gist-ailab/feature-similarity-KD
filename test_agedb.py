@@ -25,6 +25,7 @@ from tqdm import tqdm
 import torch.nn.functional as F
 from copy import deepcopy
 import random
+from collections import OrderedDict
 
 
 def set_random_seed(seed_value, use_cuda=True):
@@ -72,8 +73,12 @@ def inference(args):
 
     # Load Pretrained Teacher
     net_ckpt = torch.load(os.path.join(args.checkpoint_dir, 'last_net.ckpt'), map_location='cpu')['net_state_dict']
-    net.load_state_dict(net_ckpt)
-    
+    new_ckpt = OrderedDict()
+    for key, value in net_ckpt.items():
+        if ('conv_bridge' not in key) and ('hint' not in key):
+            new_ckpt[key] = value
+    net.load_state_dict(new_ckpt, strict=False)
+
     for param in net.parameters():
         param.requires_grad = False
     
@@ -94,57 +99,65 @@ def inference(args):
     else: 
         eval_list = [args.down_size]
         
-    average_age = 0.
-    average_cfp = 0.
-    average_lfw = 0.
-    for down_size in eval_list:
-        agedbdataset = AgeDB30(args.agedb_test_root, args.agedb_file_list, down_size, transform=transform)
-        cfpfpdataset = CFP_FP(args.cfpfp_test_root, args.cfpfp_file_list, down_size, transform=transform)
-        lfwdataset = LFW(args.lfw_test_root, args.lfw_file_list, down_size, transform=transform)
+    for cross_resolution in [False, True]:
+        average_age = 0.
+        average_cfp = 0.
+        average_lfw = 0.
+
+        if cross_resolution:
+            print('Cross Resolution Evaluation')
+        else:
+            print('Single Resolution Evaluation')
+
+        for down_size in eval_list:
+            agedbdataset = AgeDB30(args.agedb_test_root, args.agedb_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
+            cfpfpdataset = CFP_FP(args.cfpfp_test_root, args.cfpfp_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
+            lfwdataset = LFW(args.lfw_test_root, args.lfw_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
+            
+            agedbloader = torch.utils.data.DataLoader(agedbdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+            cfpfploader = torch.utils.data.DataLoader(cfpfpdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+            lfwloader = torch.utils.data.DataLoader(lfwdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+
+            # test model on AgeDB30
+            getFeatureFromTorch(os.path.join(args.checkpoint_dir, 'result/cur_agedb30_result.mat'), net, device, agedbdataset, agedbloader, qualnet=args.qualnet)
+            age_accs = evaluation_10_fold(os.path.join(args.checkpoint_dir, 'result/cur_agedb30_result.mat'))
+            print('Evaluation Result on AgeDB-30 %dX - %.2f' %(down_size, np.mean(age_accs) * 100))
+
+            # test model on CFP-FP
+            getFeatureFromTorch(os.path.join(args.checkpoint_dir, 'result/cur_cfpfp_result.mat'), net, device, cfpfpdataset, cfpfploader, qualnet=args.qualnet)
+            cfp_accs = evaluation_10_fold(os.path.join(args.checkpoint_dir, 'result/cur_cfpfp_result.mat'))
+            print('Evaluation Result on CFP-ACC %dX - %.2f' %(down_size, np.mean(cfp_accs) * 100))
+            
+            # test model on LFW
+            getFeatureFromTorch(os.path.join(args.checkpoint_dir, 'result/cur_lfw_result.mat'), net, device, lfwdataset, lfwloader, qualnet=args.qualnet)
+            lfw_accs = evaluation_10_fold(os.path.join(args.checkpoint_dir, 'result/cur_lfw_result.mat'))
+            print('Evaluation Result on LFW-ACC %dX - %.2f' %(down_size, np.mean(lfw_accs) * 100))
+
+            # Average
+            average_age += np.mean(age_accs) * 100
+            average_cfp += np.mean(cfp_accs) * 100
+            average_lfw += np.mean(lfw_accs) * 100
+            
+            
+        if len(eval_list) > 1:
+            print('average - age_accs : %.2f' %(average_age / len(eval_list)))
+            print('average - cfp_accs : %.2f' %(average_cfp / len(eval_list)))
+            print('average - lfw_accs : %.2f' %(average_lfw / len(eval_list)))
         
-        agedbloader = torch.utils.data.DataLoader(agedbdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
-        cfpfploader = torch.utils.data.DataLoader(cfpfpdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
-        lfwloader = torch.utils.data.DataLoader(lfwdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+        print('------------------------------------------------------------')
 
-        # test model on AgeDB30
-        getFeatureFromTorch(os.path.join(args.checkpoint_dir, 'result/cur_agedb30_result.mat'), net, device, agedbdataset, agedbloader, qualnet=args.qualnet)
-        age_accs = evaluation_10_fold(os.path.join(args.checkpoint_dir, 'result/cur_agedb30_result.mat'))
-        print('Evaluation Result on AgeDB-30 %dX - %.2f' %(down_size, np.mean(age_accs) * 100))
-
-        # test model on CFP-FP
-        getFeatureFromTorch(os.path.join(args.checkpoint_dir, 'result/cur_cfpfp_result.mat'), net, device, cfpfpdataset, cfpfploader, qualnet=args.qualnet)
-        cfp_accs = evaluation_10_fold(os.path.join(args.checkpoint_dir, 'result/cur_cfpfp_result.mat'))
-        print('Evaluation Result on CFP-ACC %dX - %.2f' %(down_size, np.mean(cfp_accs) * 100))
-        
-        # test model on LFW
-        getFeatureFromTorch(os.path.join(args.checkpoint_dir, 'result/cur_lfw_result.mat'), net, device, lfwdataset, lfwloader, qualnet=args.qualnet)
-        lfw_accs = evaluation_10_fold(os.path.join(args.checkpoint_dir, 'result/cur_lfw_result.mat'))
-        print('Evaluation Result on LFW-ACC %dX - %.2f' %(down_size, np.mean(lfw_accs) * 100))
-
-        # Average
-        average_age += np.mean(age_accs) * 100
-        average_cfp += np.mean(cfp_accs) * 100
-        average_lfw += np.mean(lfw_accs) * 100
-        
-        
-    if len(eval_list) > 1:
-        print('average - age_accs : %.2f' %(average_age / len(eval_list)))
-        print('average - cfp_accs : %.2f' %(average_cfp / len(eval_list)))
-        print('average - lfw_accs : %.2f' %(average_lfw / len(eval_list)))
 
         
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
     parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset')
     parser.add_argument('--down_size', type=int, default=1) # 1 : all type, 0 : high, others : low
-    parser.add_argument('--checkpoint_dir', type=str, default='checkpoint/teacher/iresnet50-ir', help='model save dir')
+    parser.add_argument('--checkpoint_dir', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/checkpoint/test/student-casia/iresnet50-E-IR-CosFace/resol1-random/F_SKD_CROSS-P{20.0,4.0}-hint-BN{True}', help='model save dir')
     parser.add_argument('--mode', type=str, default='ir', help='attention type', choices=['ir', 'cbam'])
-    parser.add_argument('--backbone', type=str, default='iresnet18')
-    parser.add_argument('--pooling', type=str, default='A')
+    parser.add_argument('--backbone', type=str, default='iresnet50')
+    parser.add_argument('--pooling', type=str, default='E')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
-    parser.add_argument('--gpus', type=str, default='5', help='model prefix')
+    parser.add_argument('--gpus', type=str, default='2', help='model prefix')
     parser.add_argument('--qualnet', type=lambda x: x.lower() == 'true', default=False)
     parser.add_argument('--seed', type=int, default=1)
     args = parser.parse_args()

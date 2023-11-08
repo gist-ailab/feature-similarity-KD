@@ -26,7 +26,7 @@ def img_loader(path, down_size):
         print('Cannot load image ' + path)
 
 class CFP_FP(data.Dataset):
-    def __init__(self, root, file_list, down_size, transform=None, loader=img_loader):
+    def __init__(self, root, file_list, down_size, transform=None, loader=img_loader, cross_resolution=False):
 
         self.root = root
         self.file_list = file_list
@@ -37,6 +37,7 @@ class CFP_FP(data.Dataset):
         self.folds = []
         self.flags = []
 
+        self.cross_resolution = cross_resolution
         self.down_size = down_size
 
         with open(file_list) as f:
@@ -58,8 +59,12 @@ class CFP_FP(data.Dataset):
             down_size = 112
         else:
             down_size = self.down_size
-            
-        _, LR_img_l = self.loader(os.path.join(self.root, self.nameLs[index]), down_size)
+
+        if self.cross_resolution:
+            _, LR_img_l = self.loader(os.path.join(self.root, self.nameLs[index]), 112)
+        else:
+            _, LR_img_l = self.loader(os.path.join(self.root, self.nameLs[index]), down_size)
+
         _, LR_img_r = self.loader(os.path.join(self.root, self.nameRs[index]), down_size)
         LR_imglist = [LR_img_l, cv2.flip(LR_img_l, 1), LR_img_r, cv2.flip(LR_img_r, 1)]
 

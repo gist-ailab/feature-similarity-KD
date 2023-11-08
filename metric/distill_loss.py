@@ -49,6 +49,34 @@ class cross_kd(nn.Module):
                        self.attention_loss(R_HH, R_LL)
         return distill_loss
     
+    def relation(self, x1, x2):
+        x1_normalized, _ = normalize(x1)
+        x2_normalized, _ = normalize(x2)
+        affinity = torch.einsum('bcM,bcN->bMN', x1_normalized, x2_normalized)
+        return affinity
+    
+    def attention_loss(self, a1, a2):
+        distill_loss = torch.mean(1.0 - F.cosine_similarity(a1.flatten(1), a2.flatten(1)))
+        return distill_loss
+    
+
+class cross_sample_kd(nn.Module):
+    def __init__(self):
+        super(cross_sample_kd, self).__init__()
+    
+    def forward(self, feat_student, feat_pos_student, feat_teacher, feat_pos_teacher):
+        feat_teacher = feat_teacher.detach()
+        feat_pos_teacher = feat_pos_teacher.detach()
+
+        # Relation
+        R_HH_pos = self.relation(feat_teacher, feat_pos_teacher)
+        R_HL_pos = self.relation(feat_teacher, feat_pos_student)
+        R_LH_pos = self.relation(feat_student, feat_pos_teacher)
+        R_LL_pos = self.relation(feat_student, feat_pos_student)
+        
+        distill_loss = (self.attention_loss(R_HH_pos, R_HL_pos) + self.attention_loss(R_HH_pos, R_LH_pos)) / 2 + self.attention_loss(R_HH_pos, R_LL_pos)
+        return distill_loss
+    
 
     def relation(self, x1, x2):
         x1_normalized, _ = normalize(x1)
