@@ -264,7 +264,7 @@ def train(args):
             if distill_param[0] > 0.:
                 if 'F_SKD' in args.distill_type:
                     for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
-                        point_loss += cosine_loss(LR_feat[correct_index], HR_feat[correct_index]) / len(HR_feat_list)
+                        point_loss += cosine_loss(LR_feat, HR_feat) / len(HR_feat_list)
                 
                 elif args.distill_type == 'A_SKD' : 
                     for HR_feat, LR_feat in zip(HR_manager.attention, LR_manager.attention):

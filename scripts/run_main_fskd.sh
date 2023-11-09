@@ -25,27 +25,7 @@ do
 done
 
 
-# Student Training - w/ Cross-Sampling
-for CMARGIN in 0.5 0.6
-do
-    MARGIN=CosFace
-    BACKBONE=iresnet50
-    METHOD=F_SKD_CROSS_BN
-    PARAM=20.0,4.0
-    RESOLUTION=1
-    INTERPOLATION=random
-    POOLING=E
-    DATASET=casia
-    TEACHER=checkpoint/teacher-$DATASET/iresnet50-$POOLING-IR-$MARGIN/last_net.ckpt
-    python train_student.py --seed 5 --gpus 0,1 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
-                            --backbone $BACKBONE --mode ir --interpolation $INTERPOLATION --margin_type $MARGIN --pooling $POOLING \
-                            --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER --save_dir checkpoint/student-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/$METHOD-P{$PARAM}-M{$CMARGIN} \
-                            --batch_size 256 --dataset $DATASET --cross_margin $CMARGIN --cross_sampling True
-done
-
-
-
-# Student Training - No Cross Sampling
+# Student Training
 MARGIN=CosFace
 BACKBONE=iresnet50
 METHOD=F_SKD_BN
@@ -59,3 +39,53 @@ python train_student.py --seed 5 --gpus 2 --data_dir /home/jovyan/SSDb/sung/data
                         --backbone $BACKBONE --mode ir --interpolation $INTERPOLATION --margin_type $MARGIN --pooling $POOLING \
                         --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER --save_dir checkpoint/student-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/$METHOD-P{$PARAM} \
                         --batch_size 256 --dataset $DATASET --cross_margin 0.0 --cross_sampling False
+
+
+
+
+CMARGIN=0.5
+MARGIN=CosFace
+BACKBONE=iresnet50
+METHOD=F_SKD_BN
+PARAM=20.0,4.0
+RESOLUTION=1
+INTERPOLATION=random
+POOLING=E
+DATASET=casia
+TEACHER=checkpoint/teacher-$DATASET/iresnet50-$POOLING-IR-$MARGIN/last_net.ckpt
+python train_student.py --seed 5 --gpus 0,1 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
+                        --backbone $BACKBONE --mode ir --interpolation $INTERPOLATION --margin_type $MARGIN --pooling $POOLING \
+                        --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER --save_dir checkpoint/student-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/$METHOD-P{$PARAM}-M{$CMARGIN} \
+                        --batch_size 256 --dataset $DATASET --cross_margin $CMARGIN --cross_sampling True
+
+CMARGIN=0.7
+MARGIN=CosFace
+BACKBONE=iresnet50
+METHOD=F_SKD_BN
+PARAM=20.0,4.0
+RESOLUTION=1
+INTERPOLATION=random
+POOLING=E
+DATASET=casia
+TEACHER=checkpoint/teacher-$DATASET/iresnet50-$POOLING-IR-$MARGIN/last_net.ckpt
+python train_student.py --seed 5 --gpus 2,3 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
+                        --backbone $BACKBONE --mode ir --interpolation $INTERPOLATION --margin_type $MARGIN --pooling $POOLING \
+                        --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER --save_dir checkpoint/student-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/$METHOD-P{$PARAM}-M{$CMARGIN} \
+                        --batch_size 256 --dataset $DATASET --cross_margin $CMARGIN --cross_sampling True
+
+
+
+CMARGIN=0.9
+MARGIN=CosFace
+BACKBONE=iresnet50
+METHOD=F_SKD_BN
+PARAM=20.0,4.0
+RESOLUTION=1
+INTERPOLATION=random
+POOLING=E
+DATASET=casia
+TEACHER=checkpoint/teacher-$DATASET/iresnet50-$POOLING-IR-$MARGIN/last_net.ckpt
+python train_student.py --seed 5 --gpus 4,5 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
+                        --backbone $BACKBONE --mode ir --interpolation $INTERPOLATION --margin_type $MARGIN --pooling $POOLING \
+                        --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER --save_dir checkpoint/student-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/$METHOD-P{$PARAM}-M{$CMARGIN} \
+                        --batch_size 256 --dataset $DATASET --cross_margin $CMARGIN --cross_sampling True
