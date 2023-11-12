@@ -67,7 +67,7 @@ def generate_dataset_list(dataset_path,dataset_list):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
-    parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset')
+    parser.add_argument('--data_dir', type=str, default='/SSDb/sung/dataset/face_dset')
     parser.add_argument('--data_name', type=str, default='faces_vgg_112x112')
     parser.add_argument('--data_type', type=str, default='train', help='train or evaluation')
     args = parser.parse_args()
