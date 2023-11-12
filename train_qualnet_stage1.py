@@ -13,7 +13,6 @@ from margin.ArcMarginProduct import ArcMarginProduct
 from margin.CosineMarginProduct import CosineMarginProduct
 from margin.AdaMarginProduct import AdaMarginProduct
 from utility.log import init_log
-from dataset.casia_webface import CASIAWebFace
 from dataset.agedb import AgeDB30
 from dataset.cfp import CFP_FP
 from dataset.lfw import LFW
@@ -30,6 +29,7 @@ import torch.nn.functional as F
 from copy import deepcopy
 import random
 from metric.distill_loss import cosine_loss, normalize, cross_kd
+from dataset.train_dataset import FaceDataset
 
 
 def set_random_seed(seed_value, use_cuda=True):
@@ -72,7 +72,7 @@ def train(args):
     ])
 
     # validation dataset
-    trainset = CASIAWebFace(args.train_root, args.train_file_list, args.down_size, transform=transform, equal=args.equal, interpolation_option=args.interpolation)
+    trainset = FaceDataset(args.train_root, 'casia', args.train_file_list, args.down_size, transform=transform, equal=args.equal, interpolation_option=args.interpolation)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
                                               shuffle=True, num_workers=8, drop_last=False)
     

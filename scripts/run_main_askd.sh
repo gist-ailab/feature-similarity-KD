@@ -1,11 +1,11 @@
 # Teacher Training
-for MARGIN in ArcFace CosFace AdaFace
+for MARGIN in CosFace ArcFace AdaFace
 do
     RESOLUTION=0
     BACKBONE=iresnet50
     POOLING=E
-    SEED=5`
-    python train_teacher.py --seed 5 --gpus 5 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher/$BACKBONE-$POOLING-CBAM-$MARGIN/seed{$SEED} \
+    SEED=5
+    python train_teacher.py --seed $SEED --gpus 5,6 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher/$BACKBONE-$POOLING-CBAM-$MARGIN/seed{$SEED} \
                             --down_size $RESOLUTION --mode cbam --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE
 done
 

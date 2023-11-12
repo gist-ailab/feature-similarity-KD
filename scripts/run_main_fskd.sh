@@ -6,7 +6,7 @@ do
     RESOLUTION=0
     BACKBONE=iresnet50
     POOLING=E
-    python train_teacher.py --seed $SEED --gpus 0,1 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/seed{$SEED} \
+    python train_teacher.py --seed $SEED --gpus 3,4 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/seed{$SEED} \
                             --down_size $RESOLUTION --mode ir --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE --dataset $DATASET --batch_size 256
 done
 
@@ -18,7 +18,7 @@ do
     RESOLUTION=0
     BACKBONE=iresnet50
     POOLING=E
-    python train_teacher.py --seed $SEED --gpus 2,3,4,5 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/seed{$SEED} \
+    python train_teacher.py --seed $SEED --gpus 3,4,5,6 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/seed{$SEED} \
                             --down_size $RESOLUTION --mode ir --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE --dataset $DATASET --batch_size 512
 done
 
