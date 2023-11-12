@@ -1,13 +1,29 @@
-# Teacher Training
-for MARGIN in MagFace
+## Teacher Training
+for MARGIN in CosFace ArcFace AdaFace
 do
+    SEED=5
     DATASET=casia
     RESOLUTION=0
     BACKBONE=iresnet50
     POOLING=E
-    python train_teacher.py --seed 5 --gpus 0 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/ \
+    python train_teacher.py --seed $SEED --gpus 0,1 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/seed{$SEED} \
                             --down_size $RESOLUTION --mode ir --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE --dataset $DATASET --batch_size 256
 done
+
+
+for MARGIN in CosFace
+do
+    SEED=5
+    DATASET=vggface
+    RESOLUTION=0
+    BACKBONE=iresnet50
+    POOLING=E
+    python train_teacher.py --seed $SEED --gpus 2,3,4,5 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/seed{$SEED} \
+                            --down_size $RESOLUTION --mode ir --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE --dataset $DATASET --batch_size 512
+done
+
+
+
 
 
 # Naive Training
