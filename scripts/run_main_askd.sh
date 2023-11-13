@@ -5,7 +5,7 @@ do
     BACKBONE=iresnet50
     POOLING=E
     SEED=5
-    python train_teacher.py --seed $SEED --gpus 5,6 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher/$BACKBONE-$POOLING-CBAM-$MARGIN/seed{$SEED} \
+    python train_teacher.py --seed $SEED --gpus 5,6 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-casia/$BACKBONE-$POOLING-CBAM-$MARGIN/seed{$SEED} \
                             --down_size $RESOLUTION --mode cbam --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE
 done
 
