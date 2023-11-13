@@ -51,14 +51,33 @@ do
         RESOLUTION=1
         POOLING=E
         INTERPOLATION=random
-        python train_teacher.py --seed $SEED --gpus 1 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/naive-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/seed{$SEED} \
+        python train_teacher.py --seed $SEED --gpus 3,4,5,6 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/naive-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/seed{$SEED} \
                                 --backbone $BACKBONE --down_size $RESOLUTION --pooling $POOLING --interpolation $INTERPOLATION --mode ir --margin_type $MARGIN --dataset $DATASET --batch_size 512
     done
 done
 
 
 
-# Student Training
+################################### Student Training ##########################
+# Cross Sampling = False
+MARGIN=CosFace
+BACKBONE=iresnet50
+METHOD=F_SKD_BN
+PARAM=20.0,4.0
+RESOLUTION=1
+INTERPOLATION=random
+POOLING=E
+DATASET=vggface
+SEED=5
+TEACHER=checkpoint/teacher-$DATASET/iresnet50-$POOLING-IR-$MARGIN/seed{$SEED}/last_net.ckpt
+python train_student.py --seed $SEED --gpus 3,4,5,6 --data_dir /SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
+                        --backbone $BACKBONE --mode ir --interpolation $INTERPOLATION --margin_type $MARGIN --pooling $POOLING \
+                        --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER --save_dir checkpoint/student-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/$METHOD-P{$PARAM}/seed{$SEED} \
+                        --batch_size 512 --dataset $DATASET --cross_sampling False
+
+
+
+# Cross Sampling = True
 MARGIN=CosFace
 BACKBONE=iresnet50
 METHOD=F_SKD_BN

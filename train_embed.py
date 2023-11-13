@@ -106,7 +106,7 @@ def selection(args):
         similarity_ii[similarity_ii > 0.99] = 0.0
 
         out_dict = {}
-        for margin in [0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+        for margin in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
             index = torch.where(similarity_ii > margin)[0]
             out_dict['pos_m{%.1f}' %margin] = gt_index[index].tolist()
         
@@ -119,8 +119,8 @@ def selection(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
-    parser.add_argument('--dataset', type=str, default='casia')
-    parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset/')
+    parser.add_argument('--dataset', type=str, default='vggface')
+    parser.add_argument('--data_dir', type=str, default='/SSDb/sung/dataset/face_dset/')
 
     parser.add_argument('--mode', type=str, default='ir', help='attention type', choices=['ir', 'cbam'])
     parser.add_argument('--backbone', type=str, default='iresnet50')
@@ -130,12 +130,12 @@ if __name__ == '__main__':
     
     parser.add_argument('--margin_type', type=str, default='CosFace', help='ArcFace, CosFace, SphereFace, MultiMargin, Softmax')
     parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
-    parser.add_argument('--batch_size', type=int, default=512, help='batch size')
+    parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument('--equal', type=lambda x: x.lower()=='true', default=True)
-    parser.add_argument('--gpus', type=str, default='0', help='model prefix')
+    parser.add_argument('--gpus', type=str, default='2', help='model prefix')
     parser.add_argument('--seed', type=int, default=1)
 
-    parser.add_argument('--teacher_path', type=str, default='checkpoint/teacher-casia/iresnet50-E-IR-CosFace/last_net.ckpt')
+    parser.add_argument('--teacher_path', type=str, default='checkpoint/teacher-vggface/iresnet50-E-IR-CosFace/seed{5}/last_net.ckpt')
     args = parser.parse_args()
 
     # PATH
