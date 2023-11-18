@@ -33,6 +33,17 @@ from metric.distill_loss import cosine_loss, normalize, cross_kd, cross_sample_k
 from collections import OrderedDict
 from utility.hook import feature_hook
 
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data.distributed import DistributedSampler
+import torch.multiprocessing as mp
+
+
+def setup(rank, world_size, port):
+    os.environ['MASTER_ADDR'] = '127.0.0.1'
+    os.environ['MASTER_PORT'] = port
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+
 
 def set_random_seed(seed_value, use_cuda=True):
     np.random.seed(seed_value) # cpu vars
@@ -46,13 +57,17 @@ def set_random_seed(seed_value, use_cuda=True):
         torch.backends.cudnn.benchmark = False
 
 
-def train(args):
+def train(rank, world_size, args):
     # gpu init
     multi_gpus = False
     if len(args.gpus.split(',')) > 1:
         multi_gpus = True
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    if multi_gpus:
+        setup(rank, world_size, args.port)
+        device = torch.device(f'cuda:{rank}')
+    else:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # log init
     save_dir = args.save_dir
@@ -72,7 +87,13 @@ def train(args):
     trainset =  FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, 
                             equal=args.equal, interpolation_option=args.interpolation,
                             teacher_folder=os.path.dirname(args.teacher_path), cross_sampling=args.cross_sampling, margin=args.cross_margin)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8, drop_last=False)
+
+    if multi_gpus:
+        train_sampler = DistributedSampler(trainset)
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=False, num_workers=8, drop_last=False, sampler=train_sampler)
+    else:
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8, drop_last=False)
+
 
     # define backbone and margin layer
     if args.backbone == 'iresnet50':
@@ -128,10 +149,15 @@ def train(args):
 
 
     if multi_gpus:
-        net = DataParallel(net).to(device)
-        aux_net = DataParallel(aux_net).to(device)
-        margin = DataParallel(margin).to(device)
-        aux_margin = DataParallel(aux_margin).to(device)
+        if args.sync:
+            net = torch.nn.SyncBatchNorm.convert_sync_batchnorm(net)
+            margin = torch.nn.SyncBatchNorm.convert_sync_batchnorm(margin)
+
+        net = DDP(net.to(device), device_ids=[rank], output_device=rank)
+        margin = DDP(margin.to(device), device_ids=[rank], output_device=rank)
+        aux_net = aux_net.to(device)
+        aux_margin = aux_margin.to(device)
+
     else:
         net = net.to(device)
         aux_net = aux_net.to(device)
@@ -231,24 +257,6 @@ def train(args):
             else:
                 LR_out = margin(LR_logits, label)
 
-
-            # multi-gpu settings for A-SKD
-            if multi_gpus and hook:
-                HR_imp, LR_imp = [], []
-
-                hr_device = np.array([str(hr[0].device) for hr in HR_manager.attention])
-                lr_device = np.array([str(lr[0].device) for lr in LR_manager.attention])
-                
-                for ord in np.unique(hr_device):
-                    for ix in np.where(hr_device == ord)[0]:
-                        HR_imp.append(HR_manager.attention[ix])
-                    for ix in np.where(lr_device == ord)[0]:
-                        LR_imp.append(LR_manager.attention[ix])
-                
-                HR_manager.attention = HR_imp
-                LR_manager.attention = LR_imp
-                del HR_imp, LR_imp
-            
             
             # Recognition Loss
             if args.margin_type == 'MagFace':
@@ -316,7 +324,7 @@ def train(args):
                 
             
             # print train information
-            if total_iters % 100 == 0:
+            if (total_iters % 100 == 0) and (rank==0):
                 # current training accuracy
                 _, predict = torch.max(LR_out.data, 1)
                 total = label.size(0)
@@ -327,7 +335,7 @@ def train(args):
                 _print("Iters: {:0>6d}, cri_loss: {:.4f}, distill_loss: {:.4f}, train_accuracy: {:.4f}, time: {:.2f} s/iter, learning rate: {}".format(total_iters, cri_loss.item(), distill_loss.item(), correct/total, time_cur, exp_lr_scheduler.get_lr()[0]))
 
             # save model
-            if total_iters % args.save_freq == 0:
+            if (total_iters % args.save_freq == 0) and (rank==0):
                 msg = 'Saving checkpoint: {}'.format(total_iters)
                 _print(msg)
                 if multi_gpus:
@@ -338,7 +346,7 @@ def train(args):
                     margin_state_dict = margin.state_dict()
                 if not os.path.exists(save_dir):
                     os.mkdir(save_dir)
-                    
+                
                 torch.save({
                     'iters': total_iters,
                     'net_state_dict': net_state_dict},
@@ -367,152 +375,157 @@ def train(args):
         LR_manager.remove_hook()  
         
     
-    # Save Last Epoch
-    msg = 'Saving checkpoint: {}'.format(total_iters)
-    _print(msg)
-    if multi_gpus:
-        net_state_dict = net.module.state_dict()
-        margin_state_dict = margin.module.state_dict()
-    else:
-        net_state_dict = net.state_dict()
-        margin_state_dict = margin.state_dict()
+    if rank == 0:
+        # Save Last Epoch
+        msg = 'Saving checkpoint: {}'.format(total_iters)
+        _print(msg)
+        if multi_gpus:
+            net_state_dict = net.module.state_dict()
+            margin_state_dict = margin.module.state_dict()
+        else:
+            net_state_dict = net.state_dict()
+            margin_state_dict = margin.state_dict()
+                
+        torch.save({
+            'iters': total_iters,
+            'net_state_dict': net_state_dict},
+            os.path.join(save_dir, 'last_net.ckpt'))
+        torch.save({
+            'iters': total_iters,
+            'net_state_dict': margin_state_dict},
+            os.path.join(save_dir, 'last_margin.ckpt'))
+
+
+        # Evaluation
+        net.eval()
+        margin.eval()
         
-    torch.save({
-        'iters': total_iters,
-        'net_state_dict': net_state_dict},
-        os.path.join(save_dir, 'last_net.ckpt'))
-    torch.save({
-        'iters': total_iters,
-        'net_state_dict': margin_state_dict},
-        os.path.join(save_dir, 'last_margin.ckpt'))
+        print('Evaluation on LFW, AgeDB-30. CFP')
+        os.makedirs(os.path.join(args.save_dir, 'result'), exist_ok=True)
+        
+        if args.down_size == 1:
+            eval_list = [112, 56, 28, 14]
+        elif args.down_size == 0:
+            eval_list = [112]
+        else: 
+            eval_list = [args.down_size]
+        
+        result_dict = {}
 
-
-    # test dataset
-    net.eval()
-    margin.eval()
-    
-    print('Evaluation on LFW, AgeDB-30. CFP')
-    os.makedirs(os.path.join(args.save_dir, 'result'), exist_ok=True)
-    
-    if args.down_size == 1:
-        eval_list = [112, 56, 28, 14]
-    elif args.down_size == 0:
-        eval_list = [112]
-    else: 
-        eval_list = [args.down_size]
-    
-    result_dict = {}
-
-    if 'mini' in args.dataset:
-        average_mini = 0.
-        for down_size in eval_list:
-            valdataset =  FaceDataset(args.train_root, args.dataset, args.val_file_list, down_size, transform=transform, 
-                                  equal=args.equal, interpolation_option='fix', teacher_folder='', cross_sampling=False, margin=0.0)
-            valloader = torch.utils.data.DataLoader(valdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
-
-            correct, total = 0, 0
-            for data in tqdm(valloader):            
-                LR_img, label = data[1].to(device), data[2].to(device)
-                
-                with torch.no_grad():
-                    LR_logits, LR_feat_list = net(LR_img, extract_feature=True)
-
-                    if args.margin_type == 'AdaFace':
-                        LR_norm = torch.norm(LR_logits, 2, 1, True)
-                        LR_out = margin(LR_logits, LR_norm, label)
-                    elif args.margin_type == 'MagFace':
-                        LR_out, LR_norm = margin(LR_logits)    
-                    else:
-                        LR_out = margin(LR_logits, label)
-
-                # current training accuracy
-                _, predict = torch.max(LR_out.data, 1)
-                
-                total += label.size(0)
-                correct += (np.array(predict.cpu()) == np.array(label.data.cpu())).sum()
-            
-            result_dict['%s_%dX' %(args.dataset, down_size)] = float(100 * correct / total)
-            _print('Evaluation Result on %s %dX - %.2f' %(args.dataset, down_size, 100 * correct / total))
-            average_mini += 100 * correct / total
-
-        if len(eval_list) > 1:
-            result_dict['%s_avg' %args.dataset] = float(average_mini / len(eval_list))
-            _print('average - %s : %.2f' %(args.dataset, average_mini / len(eval_list)))  
-
-        np.savez(os.path.join(args.save_dir, 'result', 'mini_result.npz'), **result_dict)
-    else:
-        for cross_resolution in [False, True]:
-            average_age = 0.
-            average_cfp = 0.
-            average_lfw = 0.
-
-            if cross_resolution:
-                _print('Cross Resolution Evaluation')
-            else:
-                _print('Single Resolution Evaluation')
-
+        if 'mini' in args.dataset:
+            average_mini = 0.
             for down_size in eval_list:
-                agedbdataset = AgeDB30(args.agedb_test_root, args.agedb_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
-                cfpfpdataset = CFP_FP(args.cfpfp_test_root, args.cfpfp_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
-                lfwdataset = LFW(args.lfw_test_root, args.lfw_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
+                valdataset =  FaceDataset(args.train_root, args.dataset, args.val_file_list, down_size, transform=transform, 
+                                    equal=args.equal, interpolation_option='fix', teacher_folder='', cross_sampling=False, margin=0.0)
+                valloader = torch.utils.data.DataLoader(valdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+
+                correct, total = 0, 0
+                for data in tqdm(valloader):            
+                    LR_img, label = data[1].to(device), data[2].to(device)
+                    
+                    with torch.no_grad():
+                        LR_logits, LR_feat_list = net(LR_img, extract_feature=True)
+
+                        if args.margin_type == 'AdaFace':
+                            LR_norm = torch.norm(LR_logits, 2, 1, True)
+                            LR_out = margin(LR_logits, LR_norm, label)
+                        elif args.margin_type == 'MagFace':
+                            LR_out, LR_norm = margin(LR_logits)    
+                        else:
+                            LR_out = margin(LR_logits, label)
+
+                    # current training accuracy
+                    _, predict = torch.max(LR_out.data, 1)
+                    
+                    total += label.size(0)
+                    correct += (np.array(predict.cpu()) == np.array(label.data.cpu())).sum()
                 
-                agedbloader = torch.utils.data.DataLoader(agedbdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
-                cfpfploader = torch.utils.data.DataLoader(cfpfpdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
-                lfwloader = torch.utils.data.DataLoader(lfwdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+                result_dict['%s_%dX' %(args.dataset, down_size)] = float(100 * correct / total)
+                _print('Evaluation Result on %s %dX - %.2f' %(args.dataset, down_size, 100 * correct / total))
+                average_mini += 100 * correct / total
 
-                # test model on AgeDB30
-                getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_agedb30_result.mat'), net, device, agedbdataset, agedbloader)
-                age_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_agedb30_result.mat'))
-                _print('Evaluation Result on AgeDB-30 %dX - %.2f' %(down_size, np.mean(age_accs) * 100))
-
-                if cross_resolution:
-                    result_dict['agedb_cross_%dX' %down_size] = float(np.mean(age_accs) * 100)
-                else:
-                    result_dict['agedb_%dX' %down_size] = float(np.mean(age_accs) * 100)
-
-                # test model on CFP-FP
-                getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_cfpfp_result.mat'), net, device, cfpfpdataset, cfpfploader)
-                cfp_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_cfpfp_result.mat'))
-                _print('Evaluation Result on CFP-ACC %dX - %.2f' %(down_size, np.mean(cfp_accs) * 100))
-
-                if cross_resolution:
-                    result_dict['cfpfp_cross_%dX' %down_size] = float(np.mean(cfp_accs) * 100)
-                else:
-                    result_dict['cfpfp_%dX' %down_size] = float(np.mean(cfp_accs) * 100)
-
-                # test model on LFW
-                getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_lfw_result.mat'), net, device, lfwdataset, lfwloader)
-                lfw_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_lfw_result.mat'))
-                _print('Evaluation Result on LFW-ACC %dX - %.2f' %(down_size, np.mean(lfw_accs) * 100))
-
-                if cross_resolution:
-                    result_dict['lfw_cross_%dX' %down_size] = float(np.mean(lfw_accs) * 100)
-                else:
-                    result_dict['lfw_%dX' %down_size] = float(np.mean(lfw_accs) * 100)
-
-                # Average
-                average_age += np.mean(age_accs) * 100
-                average_cfp += np.mean(cfp_accs) * 100
-                average_lfw += np.mean(lfw_accs) * 100
-                
-                
             if len(eval_list) > 1:
-                _print('average - age_accs : %.2f' %(average_age / len(eval_list)))
-                _print('average - cfp_accs : %.2f' %(average_cfp / len(eval_list)))
-                _print('average - lfw_accs : %.2f' %(average_lfw / len(eval_list)))
+                result_dict['%s_avg' %args.dataset] = float(average_mini / len(eval_list))
+                _print('average - %s : %.2f' %(args.dataset, average_mini / len(eval_list)))  
+
+            np.savez(os.path.join(args.save_dir, 'result', 'mini_result.npz'), **result_dict)
+        else:
+            for cross_resolution in [False, True]:
+                average_age = 0.
+                average_cfp = 0.
+                average_lfw = 0.
 
                 if cross_resolution:
-                    result_dict['agedb_cross_avg'] = float(average_age / len(eval_list))
-                    result_dict['cfpfp_cross_avg'] = float(average_cfp / len(eval_list))
-                    result_dict['lfw_cross_avg'] = float(average_lfw / len(eval_list))
+                    _print('Cross Resolution Evaluation')
                 else:
-                    result_dict['agedb_avg'] = float(average_age / len(eval_list))
-                    result_dict['cfpfp_avg'] = float(average_cfp / len(eval_list))
-                    result_dict['lfw_avg'] = float(average_lfw / len(eval_list))
+                    _print('Single Resolution Evaluation')
 
-            _print('------------------------------------------------------------')
-        
-        np.savez(os.path.join(args.save_dir, 'result', 'main_result.npz'), **result_dict)
+                for down_size in eval_list:
+                    agedbdataset = AgeDB30(args.agedb_test_root, args.agedb_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
+                    cfpfpdataset = CFP_FP(args.cfpfp_test_root, args.cfpfp_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
+                    lfwdataset = LFW(args.lfw_test_root, args.lfw_file_list, down_size, transform=transform, cross_resolution=cross_resolution)
+                    
+                    agedbloader = torch.utils.data.DataLoader(agedbdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+                    cfpfploader = torch.utils.data.DataLoader(cfpfpdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+                    lfwloader = torch.utils.data.DataLoader(lfwdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
+
+                    # test model on AgeDB30
+                    getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_agedb30_result.mat'), net, device, agedbdataset, agedbloader)
+                    age_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_agedb30_result.mat'))
+                    _print('Evaluation Result on AgeDB-30 %dX - %.2f' %(down_size, np.mean(age_accs) * 100))
+
+                    if cross_resolution:
+                        result_dict['agedb_cross_%dX' %down_size] = float(np.mean(age_accs) * 100)
+                    else:
+                        result_dict['agedb_%dX' %down_size] = float(np.mean(age_accs) * 100)
+
+                    # test model on CFP-FP
+                    getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_cfpfp_result.mat'), net, device, cfpfpdataset, cfpfploader)
+                    cfp_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_cfpfp_result.mat'))
+                    _print('Evaluation Result on CFP-ACC %dX - %.2f' %(down_size, np.mean(cfp_accs) * 100))
+
+                    if cross_resolution:
+                        result_dict['cfpfp_cross_%dX' %down_size] = float(np.mean(cfp_accs) * 100)
+                    else:
+                        result_dict['cfpfp_%dX' %down_size] = float(np.mean(cfp_accs) * 100)
+
+                    # test model on LFW
+                    getFeatureFromTorch(os.path.join(args.save_dir, 'result/cur_lfw_result.mat'), net, device, lfwdataset, lfwloader)
+                    lfw_accs = evaluation_10_fold(os.path.join(args.save_dir, 'result/cur_lfw_result.mat'))
+                    _print('Evaluation Result on LFW-ACC %dX - %.2f' %(down_size, np.mean(lfw_accs) * 100))
+
+                    if cross_resolution:
+                        result_dict['lfw_cross_%dX' %down_size] = float(np.mean(lfw_accs) * 100)
+                    else:
+                        result_dict['lfw_%dX' %down_size] = float(np.mean(lfw_accs) * 100)
+
+                    # Average
+                    average_age += np.mean(age_accs) * 100
+                    average_cfp += np.mean(cfp_accs) * 100
+                    average_lfw += np.mean(lfw_accs) * 100
+                    
+                    
+                if len(eval_list) > 1:
+                    _print('average - age_accs : %.2f' %(average_age / len(eval_list)))
+                    _print('average - cfp_accs : %.2f' %(average_cfp / len(eval_list)))
+                    _print('average - lfw_accs : %.2f' %(average_lfw / len(eval_list)))
+
+                    if cross_resolution:
+                        result_dict['agedb_cross_avg'] = float(average_age / len(eval_list))
+                        result_dict['cfpfp_cross_avg'] = float(average_cfp / len(eval_list))
+                        result_dict['lfw_cross_avg'] = float(average_lfw / len(eval_list))
+                    else:
+                        result_dict['agedb_avg'] = float(average_age / len(eval_list))
+                        result_dict['cfpfp_avg'] = float(average_cfp / len(eval_list))
+                        result_dict['lfw_avg'] = float(average_lfw / len(eval_list))
+
+                _print('------------------------------------------------------------')
+            
+            np.savez(os.path.join(args.save_dir, 'result', 'main_result.npz'), **result_dict)
+
+    if multi_gpus:
+        dist.destroy_process_group()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
@@ -532,7 +545,9 @@ if __name__ == '__main__':
     parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
     parser.add_argument('--equal', type=lambda x: x.lower()=='true', default=True)
     parser.add_argument('--gpus', type=str, default='0,1', help='model prefix')
+    parser.add_argument('--port', type=str, default='111', help='port num for DDP')
     parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--sync', type=lambda x: x.lower()=='true', default=True)
     
     parser.add_argument('--cross_sampling', type=lambda x: x.lower()=='true', default=True)
     parser.add_argument('--cross_margin', type=float, default=0.5)
@@ -571,7 +586,18 @@ if __name__ == '__main__':
         assert (args.interpolation == 'random') or (args.interpolation == 'fix')
 
     # Seed
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus
     set_random_seed(args.seed)
-    
-    # Run    
-    train(args)
+
+    num_gpus = len(args.gpus.split(','))
+    if num_gpus > 1:
+        args.batch_size = int(args.batch_size / num_gpus)
+        multi_gpus = True
+    else:
+        multi_gpus = False
+
+    if multi_gpus:
+        world_size = torch.cuda.device_count()
+        mp.spawn(train, args=(world_size, args,), nprocs=world_size, join=True)
+    else: 
+        train(0, world_size, args)

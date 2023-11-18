@@ -99,6 +99,10 @@ class FaceDataset(data.Dataset):
                 correct_index = torch.tensor(1)
             return HR_img, LR_img, HR_pos_img, LR_pos_img, correct_index, label
 
+    # def update_candidate(self):
+    #     # self.candidate = np.random.choice([8, 16, 24, 32, 48, 64, 112], 3, replace=False).tolist()
+    #     self.candidate = np.random.choice([14, 21, 28, 42, 56, 84, 112], 3, replace=False).tolist()
+    #     print('Resolution: ', self.candidate)
 
     def get_samples(self, index):
         if self.down_size == 1:
@@ -113,7 +117,6 @@ class FaceDataset(data.Dataset):
 
         elif self.down_size == 0:
             down_size = 112
-            
         else:
             down_size = self.down_size
         

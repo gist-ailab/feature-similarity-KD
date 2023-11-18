@@ -122,8 +122,11 @@ def train(args):
 
 
     if multi_gpus:
-        net = DataParallel(net).to(device)
-        margin = DataParallel(margin).to(device)
+        net = DataParallel(net)
+        margin = DataParallel(margin)
+        net = net.to(device)
+        margin = margin.to(device)
+
     else:
         net = net.to(device)
         margin = margin.to(device)
@@ -138,6 +141,8 @@ def train(args):
         margin.train()
 
         since = time.time()
+
+        # trainloader.dataset.update_candidate()
         for data in tqdm(trainloader):            
             img, label = data[1].to(device), data[2].to(device)                  
                         
