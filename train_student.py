@@ -152,8 +152,9 @@ def train(args):
         hook = False
     
     if args.dataset == 'casia':
-        finish_iters = 47000
-        exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[18000, 28000, 36000, 44000], gamma=0.1)
+        ratio = 256 / args.batch_size
+        finish_iters = 47000 * ratio
+        exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[18000 * ratio, 28000 * ratio, 36000 * ratio, 44000 * ratio], gamma=0.1)
     
     elif args.dataset == 'mini_casia':
         finish_iters = 24000

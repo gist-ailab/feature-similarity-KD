@@ -117,7 +117,7 @@ class IBasicBlock(nn.Module):
         if self.attention_target_all is not None:
             _ = self.attention_target_all(attn)
 
-        out += identity
+        out = out + identity
         return out
 
     def forward(self, x):

@@ -106,7 +106,7 @@ def selection(args):
         similarity_ii[similarity_ii > 0.99] = 0.0
 
         out_dict = {}
-        for margin in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+        for margin in [-1.0, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
             index = torch.where(similarity_ii > margin)[0]
             out_dict['pos_m{%.1f}' %margin] = gt_index[index].tolist()
         

@@ -1,2 +1,1 @@
-python train_embed.py --mode ir --backbone iresnet50 --gpus 0 --teacher_path checkpoint/teacher-casia/iresnet50-E-IR-CosFace/last_net.ckpt
-python train_embed.py --mode ir --backbone iresnet50 --gpus 1 --teacher_path checkpoint/teacher-casia/iresnet50-E-IR-ArcFace/last_net.ckpt
+python train_embed.py --mode ir --backbone iresnet50 --gpus 4 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset --teacher_path checkpoint/teacher-casia/iresnet50-E-IR-CosFace/seed{5}/last_net.ckpt

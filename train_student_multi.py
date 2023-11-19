@@ -66,8 +66,10 @@ def train(rank, world_size, args):
     if multi_gpus:
         setup(rank, world_size, args.port)
         device = torch.device(f'cuda:{rank}')
+        dist.barrier()
     else:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
     # log init
     save_dir = args.save_dir
@@ -149,12 +151,12 @@ def train(rank, world_size, args):
 
 
     if multi_gpus:
-        if args.sync:
-            net = torch.nn.SyncBatchNorm.convert_sync_batchnorm(net)
-            margin = torch.nn.SyncBatchNorm.convert_sync_batchnorm(margin)
-
+        net = torch.nn.SyncBatchNorm.convert_sync_batchnorm(net)
+        margin = torch.nn.SyncBatchNorm.convert_sync_batchnorm(margin)
+        
         net = DDP(net.to(device), device_ids=[rank], output_device=rank)
         margin = DDP(margin.to(device), device_ids=[rank], output_device=rank)
+        
         aux_net = aux_net.to(device)
         aux_margin = aux_margin.to(device)
 
@@ -273,22 +275,22 @@ def train(rank, world_size, args):
             if distill_param[0] > 0.:
                 if 'F_SKD' in args.distill_type:
                     for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
-                        point_loss += cosine_loss(LR_feat, HR_feat) / len(HR_feat_list)
+                        point_loss = point_loss + cosine_loss(LR_feat, HR_feat) / len(HR_feat_list)
                 
                 elif args.distill_type == 'A_SKD' : 
                     for HR_feat, LR_feat in zip(HR_manager.attention, LR_manager.attention):
-                        point_loss += (cosine_loss(LR_feat[0], HR_feat[0]) + cosine_loss(LR_feat[1], HR_feat[1])) / len(HR_manager.attention) / 2
+                        point_loss = point_loss + (cosine_loss(LR_feat[0], HR_feat[0]) + cosine_loss(LR_feat[1], HR_feat[1])) / len(HR_manager.attention) / 2
                 
                 elif args.distill_type == 'RKD':
-                    point_loss += RKD_cri(w_dist=1., w_angle=2.)(LR_logits, HR_logits)
+                    point_loss = point_loss + RKD_cri(w_dist=1., w_angle=2.)(LR_logits, HR_logits)
                     
                 elif args.distill_type == 'FitNet':
                     for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
-                        point_loss += mse_loss(LR_feat, HR_feat) / len(HR_feat_list)
+                        point_loss = point_loss + mse_loss(LR_feat, HR_feat) / len(HR_feat_list)
                 
                 elif args.distill_type == 'AT':
                     for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
-                        point_loss += AT_cri(p=2)(LR_feat, HR_feat) / len(HR_feat_list)
+                        point_loss = point_loss + AT_cri(p=2)(LR_feat, HR_feat) / len(HR_feat_list)
             
                 else:
                     raise('No Proper Distillation')
@@ -298,13 +300,13 @@ def train(rank, world_size, args):
             cross_loss = 0.    
             if (distill_param[1] > 0.):
                 if args.cross_sampling:
-                    cross_loss += cross_sample_kd()(LR_feat_list[-1][correct_index], LR_pos_feat_list[-1][correct_index],
+                    cross_loss = cross_loss + cross_sample_kd()(LR_feat_list[-1][correct_index], LR_pos_feat_list[-1][correct_index],
                                                     HR_feat_list[-1][correct_index], HR_pos_feat_list[-1][correct_index])
                 else:
                     new_correct_index = list(range(torch.sum(correct_index).item()))
                     random.shuffle(new_correct_index)
-                    cross_loss += cross_kd()(LR_feat_list[-1][correct_index], LR_feat_list[-1][correct_index][new_correct_index],
-                                             HR_feat_list[-1][correct_index], HR_feat_list[-1][correct_index][new_correct_index])
+                    cross_loss = cross_loss + cross_kd()(LR_feat_list[-1][correct_index], LR_feat_list[-1][correct_index][new_correct_index],
+                                                         HR_feat_list[-1][correct_index], HR_feat_list[-1][correct_index][new_correct_index])
                 
             distill_loss = point_loss * distill_param[0] + cross_loss * distill_param[1]
             
@@ -547,7 +549,6 @@ if __name__ == '__main__':
     parser.add_argument('--gpus', type=str, default='0,1', help='model prefix')
     parser.add_argument('--port', type=str, default='111', help='port num for DDP')
     parser.add_argument('--seed', type=int, default=1)
-    parser.add_argument('--sync', type=lambda x: x.lower()=='true', default=True)
     
     parser.add_argument('--cross_sampling', type=lambda x: x.lower()=='true', default=True)
     parser.add_argument('--cross_margin', type=float, default=0.5)
