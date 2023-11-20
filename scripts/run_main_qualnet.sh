@@ -1,12 +1,14 @@
 # Teacher Training
 for MARGIN in CosFace ArcFace AdaFace
 do
-    SEED=5
-    RESOLUTION=0
-    BACKBONE=iresnet50
-    POOLING=E
-    python train_qualnet_stage1.py --seed $SEED --gpus 3 --data_dir /SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher/$BACKBONE-$POOLING-qualnet-$MARGIN/seed{$SEED} \
-                            --down_size $RESOLUTION --mode ir --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE
+    for SEED in 5 4 3 2 1
+    do
+        RESOLUTION=0
+        BACKBONE=iresnet50
+        POOLING=E
+        python train_qualnet_stage1.py --seed $SEED --gpus 2 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-casia/$BACKBONE-$POOLING-qualnet-$MARGIN/seed{$SEED} \
+                                --down_size $RESOLUTION --mode ir --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE
+    done
 done
 
 

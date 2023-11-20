@@ -17,6 +17,7 @@ import cv2
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
+from collections import OrderedDict
 
 class ListDataset(Dataset):
     def __init__(self, img_list):
@@ -100,9 +101,15 @@ def load_model(args):
         net = iresnet18(attention_type=args.mode, pooling=args.pooling, qualnet=args.qualnet)
     elif args.backbone == 'iresnet50':
         net = iresnet50(attention_type=args.mode, pooling=args.pooling, qualnet=args.qualnet)
-        
-    net.load_state_dict(torch.load(args.checkpoint_path)['net_state_dict'])
 
+    # Load Pretrained Teacher
+    net_ckpt = torch.load(os.path.join(args.checkpoint_path), map_location='cpu')['net_state_dict']
+    new_ckpt = OrderedDict()
+    for key, value in net_ckpt.items():
+        if ('conv_bridge' not in key) and ('hint' not in key):
+            new_ckpt[key] = value
+    net.load_state_dict(new_ckpt, strict=False)
+    
     if multi_gpus:
         net = DataParallel(net).to(device)
     else:

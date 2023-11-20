@@ -76,9 +76,9 @@ def train(args):
 
     # define backbone and margin layer
     if args.backbone == 'iresnet50':
-        net = iresnet50(attention_type=args.mode, pooling=args.pooling, student=True)
+        net = iresnet50(attention_type=args.mode, pooling=args.pooling, student=True, hint_bn=args.hint_bn)
     elif args.backbone == 'iresnet18':
-        net = iresnet18(attention_type=args.mode, pooling=args.pooling, student=True)
+        net = iresnet18(attention_type=args.mode, pooling=args.pooling, student=True, hint_bn=args.hint_bn)
 
     # Margin
     if args.margin_type == 'ArcFace':
@@ -535,6 +535,7 @@ if __name__ == '__main__':
     parser.add_argument('--gpus', type=str, default='0,1', help='model prefix')
     parser.add_argument('--seed', type=int, default=1)
     
+    parser.add_argument('--hint_bn', type=lambda x: x.lower()=='true', default=True)
     parser.add_argument('--cross_sampling', type=lambda x: x.lower()=='true', default=True)
     parser.add_argument('--cross_margin', type=float, default=0.5)
     parser.add_argument('--distill_param', type=str, default='1.0,1.0', help='hyperparams for distillation loss')

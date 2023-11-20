@@ -69,8 +69,11 @@ class FaceDataset(data.Dataset):
 
         self.margin = margin
         if cross_sampling:
-            with open(os.path.join(teacher_folder, 'cross_dict.pkl'), 'rb') as f:
-                self.cross_dict = pickle.load(f)
+            if self.margin < -1:
+                self.cross_dict = len(image_list)
+            else:
+                with open(os.path.join(teacher_folder, 'cross_dict.pkl'), 'rb') as f:
+                    self.cross_dict = pickle.load(f)
         else:
             self.cross_dict = None
 
@@ -89,14 +92,20 @@ class FaceDataset(data.Dataset):
         if self.cross_dict is None:
             return HR_img, LR_img, label
         else:
-            pos_list = self.cross_dict[index]['pos_m{%.1f}' %self.margin]
-            if len(pos_list) == 0:
-                HR_pos_img, LR_pos_img = HR_img, LR_img
-                correct_index = torch.tensor(0)
-            else:
-                pos_index = np.random.choice(pos_list, 1, replace=False)[0]
+            if self.margin < -1:
+                pos_index = np.random.choice(list(range(self.cross_dict)), 1, replace=False)[0]
                 HR_pos_img, LR_pos_img, _ = self.get_samples(int(pos_index))
                 correct_index = torch.tensor(1)
+            else:
+                pos_list = self.cross_dict[index]['pos_m{%.1f}' %self.margin]
+                if len(pos_list) == 0:
+                    HR_pos_img, LR_pos_img = HR_img, LR_img
+                    correct_index = torch.tensor(0)
+                else:
+                    pos_index = np.random.choice(pos_list, 1, replace=False)[0]
+                    HR_pos_img, LR_pos_img, _ = self.get_samples(int(pos_index))
+                    correct_index = torch.tensor(1)
+            
             return HR_img, LR_img, HR_pos_img, LR_pos_img, correct_index, label
 
     # def update_candidate(self):

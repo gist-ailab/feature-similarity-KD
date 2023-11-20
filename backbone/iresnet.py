@@ -128,7 +128,7 @@ class IResNet(nn.Module):
     fc_scale = 7 * 7
     def __init__(self,
                  block, layers, pooling, dropout=0, num_features=512, zero_init_residual=False,
-                 groups=1, width_per_group=64, replace_stride_with_dilation=None, attention_type='ir', qualnet=False, student=False):
+                 groups=1, width_per_group=64, replace_stride_with_dilation=None, attention_type='ir', qualnet=False, student=False, hint_bn=True):
         super(IResNet, self).__init__()
         self.extra_gflops = 0.0
         self.inplanes = 64
@@ -165,10 +165,10 @@ class IResNet(nn.Module):
 
         self.student = student
         if self.student:
-            self.hint_layer1 = HintLayer(self.layer1[0].conv1.out_channels, self.layer1[0].conv1.out_channels, bn=True)
-            self.hint_layer2 = HintLayer(self.layer2[0].conv1.out_channels, self.layer2[0].conv1.out_channels, bn=True)
-            self.hint_layer3 = HintLayer(self.layer3[0].conv1.out_channels, self.layer3[0].conv1.out_channels, bn=True)
-            self.hint_layer4 = HintLayer(self.layer4[0].conv1.out_channels, self.layer4[0].conv1.out_channels, bn=True)
+            self.hint_layer1 = HintLayer(self.layer1[0].conv1.out_channels, self.layer1[0].conv1.out_channels, bn=hint_bn)
+            self.hint_layer2 = HintLayer(self.layer2[0].conv1.out_channels, self.layer2[0].conv1.out_channels, bn=hint_bn)
+            self.hint_layer3 = HintLayer(self.layer3[0].conv1.out_channels, self.layer3[0].conv1.out_channels, bn=hint_bn)
+            self.hint_layer4 = HintLayer(self.layer4[0].conv1.out_channels, self.layer4[0].conv1.out_channels, bn=hint_bn)
         else:
             self.hint_layer1, self.hint_layer2, self.hint_layer3, self.hint_layer4 = None, None, None, None
         

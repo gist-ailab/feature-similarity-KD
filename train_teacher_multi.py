@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 # encoding: utf-8
-
 import os
 import pathlib
 base_folder = str(pathlib.Path(__file__).parent.resolve())
 os.chdir(base_folder)
 import torch.utils.data
-from backbone.iresnet import iresnet18, iresnet50
 from torch.nn import DataParallel
+from backbone.iresnet import iresnet18, iresnet50
 from margin.ArcMarginProduct import ArcMarginProduct
 from margin.CosineMarginProduct import CosineMarginProduct
 from margin.AdaMarginProduct import AdaMarginProduct
@@ -19,19 +18,13 @@ from dataset.cfp import CFP_FP
 from dataset.lfw import LFW
 from torch.optim import lr_scheduler
 import torch.optim as optim
-import torch.nn as nn
 import time
 from evaluation.eval_lfw import evaluation_10_fold, getFeatureFromTorch
 import numpy as np
 import torchvision.transforms as transforms
 import argparse
 from tqdm import tqdm
-import torch.nn.functional as F
-from copy import deepcopy
 import random
-from metric.distill_loss import cosine_loss, normalize, cross_kd, cross_sample_kd, RKD_cri, AT_cri, mse_loss
-from collections import OrderedDict
-from utility.hook import feature_hook
 
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -75,7 +68,7 @@ def train(args):
     save_dir = args.save_dir
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs(os.path.join(args.save_dir, 'result'), exist_ok=True)
-                 
+
     if args.local_rank == 0:
         logging = init_log(save_dir)
         _print = logging.info
@@ -83,31 +76,26 @@ def train(args):
         logging = None
         _print = None
 
-
     # dataset loader
     transform = transforms.Compose([
         transforms.ToTensor(),  # range [0, 255] -> [0.0,1.0]
         transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))  # range [0.0, 1.0] -> [-1.0,1.0]
     ])
 
-
     # train dataset
     args.batch_size = int(args.batch_size / args.world_size)
-    trainset =  FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, 
-                            equal=args.equal, interpolation_option=args.interpolation,
-                            teacher_folder=os.path.dirname(args.teacher_path), cross_sampling=args.cross_sampling, margin=args.cross_margin)
+    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, equal=args.equal, interpolation_option=args.interpolation)
 
     train_sampler = DistributedSampler(trainset)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=False, num_workers=8, drop_last=False, sampler=train_sampler)
-
-
+    
     # define backbone and margin layer
     if args.backbone == 'iresnet50':
-        net = iresnet50(attention_type=args.mode, pooling=args.pooling, student=True, hint_bn=args.hint_bn)
+        net = iresnet50(attention_type=args.mode, pooling=args.pooling)
     elif args.backbone == 'iresnet18':
-        net = iresnet18(attention_type=args.mode, pooling=args.pooling, student=True, hint_bn=args.hint_bn)
-
-    # Margin
+        net = iresnet18(attention_type=args.mode, pooling=args.pooling)    
+        
+    # Head
     if args.margin_type == 'ArcFace':
         margin = ArcMarginProduct(args.feature_dim, trainset.class_nums)
     elif args.margin_type == 'CosFace':
@@ -119,29 +107,7 @@ def train(args):
     else:
         print(args.margin_type, 'is not available!')
 
-
-    # Load Teacher Model and Freeze
-    aux_net = iresnet50(attention_type=args.mode, pooling=args.pooling)
-    aux_margin = deepcopy(margin)
-
-    # Load Pretrained Teacher
-    net_ckpt = torch.load(args.teacher_path, map_location='cpu')['net_state_dict']
     
-    new_ckpt = OrderedDict()
-    for key, value in net_ckpt.items():
-        if 'conv_bridge' not in key:
-            new_ckpt[key] = value
-    
-    aux_net.load_state_dict(new_ckpt)
-    aux_margin.load_state_dict(torch.load(args.teacher_path.replace('_net.ckpt', '_margin.ckpt'), map_location='cpu')['net_state_dict'])
-    
-    for param in aux_net.parameters():
-        param.requires_grad = False
-    
-    for param in aux_margin.parameters():
-        param.requires_grad = False
-
-
     # define optimizers for different layer
     if args.margin_type == 'MagFace':
         criterion = MagLoss().to(args.local_rank)
@@ -154,35 +120,14 @@ def train(args):
     ], lr=0.1, momentum=0.9, nesterov=True)
 
 
-    net = torch.nn.SyncBatchNorm.convert_sync_batchnorm(net)
-    margin = torch.nn.SyncBatchNorm.convert_sync_batchnorm(margin)
-    
-    net = DDP(net.to(args.local_rank), device_ids=[args.local_rank])
-    margin = DDP(margin.to(args.local_rank), device_ids=[args.local_rank])
-    
-    aux_net = aux_net.to(args.local_rank)
-    aux_margin = aux_margin.to(args.local_rank)
-
-    total_iters = 0
-
-    if args.distill_type == 'A_SKD':
-        target_layer = 'attention_target'
-        HR_manager = feature_hook(aux_net, multi_gpu=True, target_layer=target_layer)    
-        LR_manager = feature_hook(net, multi_gpu=True, target_layer=target_layer)
-        hook = True
-    else:
-        LR_manager = None
-        HR_manager = None
-        hook = False
-    
     if args.dataset == 'casia':
         finish_iters = 47000
         exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[18000, 28000, 36000, 44000], gamma=0.1)
-    
+
     elif args.dataset == 'mini_casia':
         finish_iters = 24000
         exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[9000, 14000, 18000, 22000], gamma=0.1)
-    
+
     elif args.dataset == 'vggface':
         if args.margin_type == 'AdaFace':
             finish_iters = (6128 * 26)
@@ -190,7 +135,7 @@ def train(args):
         else:
             finish_iters = (6128 * 24)
             exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[6128 * 10, 6128 * 18, 6128 * 22], gamma=0.1)
-
+    
     elif args.dataset == 'ms1mv2':
         if args.margin_type == 'AdaFace':
             finish_iters = (11373 * 26)
@@ -199,154 +144,79 @@ def train(args):
             finish_iters = (11373 * 24)
             exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[11373 * 10, 11373 * 18, 11373 * 22], gamma=0.1)
 
+
+    net = torch.nn.SyncBatchNorm.convert_sync_batchnorm(net)
+    margin = torch.nn.SyncBatchNorm.convert_sync_batchnorm(margin)
+    
+    net = DDP(net.to(args.local_rank), device_ids=[args.local_rank])
+    margin = DDP(margin.to(args.local_rank), device_ids=[args.local_rank])
+
+    total_iters = 0
+
     # Run
     GOING = True
     while GOING:
-        # train model and freeze batchnorm for main network
-        net.train()        
+        # train model
+        net.train()
         margin.train()
-        aux_net.eval()
-        aux_margin.eval()
 
         since = time.time()
 
         # trainloader.dataset.update_candidate()
         for data in tqdm(trainloader):            
-            if args.cross_sampling:
-                HR_img, LR_img, HR_pos_img, LR_pos_img, correct_index, label = data[0].to(args.local_rank), data[1].to(args.local_rank), data[2].to(args.local_rank), data[3].to(args.local_rank), data[4].to(args.local_rank), data[5].to(args.local_rank)
-                correct_index = correct_index.bool()
-            else:
-                HR_img, LR_img, label = data[0].to(args.local_rank), data[1].to(args.local_rank), data[2].to(args.local_rank)   
-                B = HR_img.size(0)
-                correct_index = torch.ones(B).bool()            
-
-            # Clear Hook
-            if hook:
-                LR_manager.attention = []
-                HR_manager.attention = []
-                
-
-            # High-Resolution Forward
-            with torch.no_grad():
-                HR_logits, HR_feat_list = aux_net(HR_img, extract_feature=True)
-
-                if args.cross_sampling:
-                    _, HR_pos_feat_list = aux_net(HR_pos_img, extract_feature=True)
-
-                if args.margin_type == 'AdaFace':
-                    HR_norm = torch.norm(HR_logits, 2, 1, True)
-                    HR_out = margin(HR_logits, HR_norm, label)
-                elif args.margin_type == 'MagFace':
-                    HR_out, _ = margin(HR_logits)
-                else:
-                    HR_out = aux_margin(HR_logits, label)
-            
-
-            # Low-Resolution Forward     
-            LR_logits, LR_feat_list = net(LR_img, extract_feature=True)
-            if args.cross_sampling:
-                _, LR_pos_feat_list = net(LR_pos_img, extract_feature=True)
-
+            img, label = data[1].to(args.local_rank), data[2].to(args.local_rank)                  
+                        
+            raw_logits = net(img)
             if args.margin_type == 'AdaFace':
-                LR_norm = torch.norm(LR_logits, 2, 1, True)
-                LR_out = margin(LR_logits, LR_norm, label)
+                norm = torch.norm(raw_logits, 2, 1, True)
+                out = margin(raw_logits, norm, label)
             elif args.margin_type == 'MagFace':
-                LR_out, LR_norm = margin(LR_logits)    
+                out, norm = margin(raw_logits)
             else:
-                LR_out = margin(LR_logits, label)
-
+                out = margin(raw_logits, label)
             
-            # Recognition Loss
+            # Loss
             if args.margin_type == 'MagFace':
-                soft_loss, loss_g, LR_out = criterion(LR_out, label, LR_norm)
-                cri_loss = soft_loss + loss_g * 20.0
+                cri_loss, loss_g, out = criterion(out, label, norm)
+                total_loss = cri_loss + loss_g * 20.0
             else:
-                cri_loss = criterion(LR_out, label)
+                cri_loss = criterion(out, label)
+                total_loss = cri_loss
 
-            # Distillation
-            distill_param = list(map(float, args.distill_param.split(',')))
-
-            # Point distillation
-            point_loss = 0.
-            if distill_param[0] > 0.:
-                if 'F_SKD' in args.distill_type:
-                    for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
-                        point_loss = point_loss + cosine_loss(LR_feat, HR_feat) / len(HR_feat_list)
-                
-                elif args.distill_type == 'A_SKD' : 
-                    for HR_feat, LR_feat in zip(HR_manager.attention, LR_manager.attention):
-                        point_loss = point_loss + (cosine_loss(LR_feat[0], HR_feat[0]) + cosine_loss(LR_feat[1], HR_feat[1])) / len(HR_manager.attention) / 2
-                
-                elif args.distill_type == 'RKD':
-                    point_loss = point_loss + RKD_cri(w_dist=1., w_angle=2.)(LR_logits, HR_logits)
-                    
-                elif args.distill_type == 'FitNet':
-                    for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
-                        point_loss = point_loss + mse_loss(LR_feat, HR_feat) / len(HR_feat_list)
-                
-                elif args.distill_type == 'AT':
-                    for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
-                        point_loss = point_loss + AT_cri(p=2)(LR_feat, HR_feat) / len(HR_feat_list)
-            
-                else:
-                    raise('No Proper Distillation')
-                
-
-            # Cross Distillation Loss
-            cross_loss = 0.    
-            if (distill_param[1] > 0.):
-                if args.cross_sampling:
-                    cross_loss = cross_loss + cross_sample_kd()(LR_feat_list[-1][correct_index], LR_pos_feat_list[-1][correct_index],
-                                                    HR_feat_list[-1][correct_index], HR_pos_feat_list[-1][correct_index])
-                else:
-                    new_correct_index = list(range(torch.sum(correct_index).item()))
-                    random.shuffle(new_correct_index)
-                    cross_loss = cross_loss + cross_kd()(LR_feat_list[-1][correct_index], LR_feat_list[-1][correct_index][new_correct_index],
-                                                         HR_feat_list[-1][correct_index], HR_feat_list[-1][correct_index][new_correct_index])
-                
-            distill_loss = point_loss * distill_param[0] + cross_loss * distill_param[1]
-            
-            # Total Loss
-            total_loss = cri_loss + distill_loss
 
             # Optim
             optimizer_ft.zero_grad()
             total_loss.backward()
             optimizer_ft.step()
 
-
-            # Clear Features
-            if hook:
-                HR_manager.attention = []
-                LR_manager.attention = []
-                
-            
             # print train information
             if (total_iters % 100 == 0) and (args.local_rank==0):
                 # current training accuracy
-                _, predict = torch.max(LR_out.data, 1)
+                _, predict = torch.max(out.data, 1)
                 total = label.size(0)
 
                 correct = (np.array(predict.cpu()) == np.array(label.data.cpu())).sum()
                 time_cur = (time.time() - since) / 100
                 since = time.time()
-                _print("Iters: {:0>6d}, cri_loss: {:.4f}, distill_loss: {:.4f}, train_accuracy: {:.4f}, time: {:.2f} s/iter, learning rate: {}".format(total_iters, cri_loss.item(), distill_loss.item(), correct/total, time_cur, exp_lr_scheduler.get_lr()[0]))
+                _print("Iters: {:0>6d}, loss: {:.4f}, train_accuracy: {:.4f}, time: {:.2f} s/iter, learning rate: {}".format(total_iters, total_loss.item(), correct/total, time_cur, exp_lr_scheduler.get_lr()[0]))
+
 
             # save model
             if (total_iters % args.save_freq == 0) and (args.local_rank==0):
                 msg = 'Saving checkpoint: {}'.format(total_iters)
                 _print(msg)
-
                 net_state_dict = net.module.state_dict()
                 margin_state_dict = margin.module.state_dict()
-
+                    
                 if not os.path.exists(save_dir):
                     os.mkdir(save_dir)
-                
+                    
                 torch.save({
                     'iters': total_iters,
-                    'net_state_dict': net_state_dict},
+                    'net_state_dict': net_state_dict
+                    },
                     os.path.join(save_dir, 'Iter_%06d_net.ckpt' % total_iters))
+                
                 torch.save({
                     'iters': total_iters,
                     'net_state_dict': margin_state_dict},
@@ -363,36 +233,30 @@ def train(args):
             # Next Iterations
             total_iters += 1
             
-    
-
-    # Remove Hook
-    if hook:
-        HR_manager.remove_hook()
-        LR_manager.remove_hook()  
-        
-    
+            
+    # Evaluation 
     if args.local_rank == 0:
-        # Save Last Epoch
         msg = 'Saving checkpoint: {}'.format(total_iters)
         _print(msg)
+
         net_state_dict = net.module.state_dict()
         margin_state_dict = margin.module.state_dict()
-                
+            
         torch.save({
             'iters': total_iters,
-            'net_state_dict': net_state_dict},
+            'net_state_dict': net_state_dict
+            },
             os.path.join(save_dir, 'last_net.ckpt'))
         torch.save({
             'iters': total_iters,
             'net_state_dict': margin_state_dict},
             os.path.join(save_dir, 'last_margin.ckpt'))
 
-
-        # Evaluation
+        # test dataset
         net.eval()
         margin.eval()
         
-        _print('Evaluation on LFW, AgeDB-30. CFP')
+        print('Evaluation on LFW, AgeDB-30. CFP')
         os.makedirs(os.path.join(args.save_dir, 'result'), exist_ok=True)
         
         if args.down_size == 1:
@@ -401,7 +265,7 @@ def train(args):
             eval_list = [112]
         else: 
             eval_list = [args.down_size]
-        
+            
         result_dict = {}
 
         if 'mini' in args.dataset:
@@ -441,6 +305,7 @@ def train(args):
                 _print('average - %s : %.2f' %(args.dataset, average_mini / len(eval_list)))  
 
             np.savez(os.path.join(args.save_dir, 'result', 'mini_result.npz'), **result_dict)
+            
         else:
             for cross_resolution in [False, True]:
                 average_age = 0.
@@ -521,40 +386,33 @@ def train(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
     parser.add_argument('--dataset', type=str, default='casia')
-    parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset/')
+    parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset')
+    parser.add_argument('--save_dir', type=str, default='imp/', help='model save dir')
     parser.add_argument('--down_size', type=int, default=1) # 1 : all type, 0 : high, others : low
-    parser.add_argument('--save_dir', type=str, default='checkpoint/imp/', help='model save dir')
-    parser.add_argument('--mode', type=str, default='ir', help='attention type', choices=['ir', 'cbam'])
-    parser.add_argument('--backbone', type=str, default='iresnet50')
-    
-    parser.add_argument('--interpolation', type=str, default='random')
-    parser.add_argument('--pooling', type=str, default='E')
-    
-    parser.add_argument('--margin_type', type=str, default='CosFace', help='ArcFace, CosFace, SphereFace, MultiMargin, Softmax')
-    parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
-    parser.add_argument('--batch_size', type=int, default=256, help='batch size')
-    parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
-    parser.add_argument('--equal', type=lambda x: x.lower()=='true', default=True)
-    parser.add_argument('--seed', type=int, default=1)
-    
+    parser.add_argument('--interpolation', type=str, default='random') # 
+    parser.add_argument('--pooling', type=str, default='E') #
+
     parser.add_argument('--global_rank', type=int, default=0)
     parser.add_argument("--local_rank", type=int, help="Local rank. Necessary for using the torch.distributed.launch utility.")
     parser.add_argument('--world_size', type=int, default=0)
     parser.add_argument('--port', type=int, default=2022)
-    
-    parser.add_argument('--hint_bn', type=lambda x: x.lower()=='true', default=True)
-    parser.add_argument('--cross_sampling', type=lambda x: x.lower()=='true', default=True)
-    parser.add_argument('--cross_margin', type=float, default=0.5)
-    parser.add_argument('--distill_param', type=str, default='1.0,1.0', help='hyperparams for distillation loss')
-    parser.add_argument('--distill_type', type=str, default='F_SKD_BLOCK', help='distillation types')
-    parser.add_argument('--teacher_path', type=str, default='checkpoint/teacher-casia/iresnet50-E-IR-CosFace/last_net.ckpt')
+
+    parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--backbone', type=str, default='iresnet50')
+    parser.add_argument('--margin_type', type=str, default='CosFace', help='ArcFace, CosFace, SphereFace, MultiMargin, Softmax')
+    parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
+    parser.add_argument('--mode', type=str, default='ir')
+    parser.add_argument('--batch_size', type=int, default=256, help='batch size')
+    parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
+    parser.add_argument('--equal', type=lambda x: x.lower()=='true', default=True)
     args = parser.parse_args()
 
 
-    # PATH
+    # Path
     if args.dataset == 'casia':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train.list')
+
     elif args.dataset == 'mini_casia':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train_mini.list')
@@ -568,17 +426,21 @@ if __name__ == '__main__':
         args.train_file_list = os.path.join(args.data_dir, 'faces_vgg_112x112/train.list')
     else:
         raise('Select Proper Dataset')
-    
+
     args.lfw_test_root = os.path.join(args.data_dir, 'evaluation/lfw')
     args.lfw_file_list = os.path.join(args.data_dir, 'evaluation/lfw.txt')
     args.agedb_test_root = os.path.join(args.data_dir, 'evaluation/agedb_30')
     args.agedb_file_list = os.path.join(args.data_dir, 'evaluation/agedb_30.txt')
     args.cfpfp_test_root = os.path.join(args.data_dir, 'evaluation/cfp_fp')
     args.cfpfp_file_list = os.path.join(args.data_dir, 'evaluation/cfp_fp.txt')
-
+    
+    
     if args.down_size not in [0, 112]:
         assert (args.interpolation == 'random') or (args.interpolation == 'fix')
-
+    
+    
     # Seed
-    set_random_seed(args.seed) 
+    set_random_seed(args.seed)
+
+    # Run
     train(args)
