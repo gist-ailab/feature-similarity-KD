@@ -101,7 +101,7 @@ def DIR_FAR(score_mat, label_mat, ranks=[1], FARs=[1.0], get_false_indices=False
     # Split the matrix for match probes and non-match probes
     # subfix _m: match, _nm: non-match
     # For closed set, we only use the match probes
-    match_indices = label_mat.astype(np.bool).any(axis=1)
+    match_indices = label_mat.astype("bool").any(axis=1)
     score_mat_m = score_mat[match_indices,:]
     label_mat_m = label_mat[match_indices,:]
     score_mat_nm = score_mat[np.logical_not(match_indices),:]
@@ -111,7 +111,7 @@ def DIR_FAR(score_mat, label_mat, ranks=[1], FARs=[1.0], get_false_indices=False
 
     # Find the thresholds for different FARs
     max_score_nm = np.max(score_mat_nm, axis=1)
-    label_temp = np.zeros(max_score_nm.shape, dtype=np.bool)
+    label_temp = np.zeros(max_score_nm.shape, dtype="bool")
     if len(FARs) == 1 and FARs[0] >= 1.0:
         # If only testing closed-set identification, use the minimum score as threshold
         # in case there is no non-mate probes
@@ -125,7 +125,7 @@ def DIR_FAR(score_mat, label_mat, ranks=[1], FARs=[1.0], get_false_indices=False
 
     # Sort the labels row by row according to scores
     sort_idx_mat_m = np.argsort(score_mat_m, axis=1)
-    sorted_label_mat_m = np.ndarray(label_mat_m.shape, dtype=np.bool)
+    sorted_label_mat_m = np.ndarray(label_mat_m.shape, dtype="bool")
     for row in range(label_mat_m.shape[0]):
         sort_idx = (sort_idx_mat_m[row, :])[::-1]
         sorted_label_mat_m[row,:] = label_mat_m[row, sort_idx]
@@ -138,9 +138,9 @@ def DIR_FAR(score_mat, label_mat, ranks=[1], FARs=[1.0], get_false_indices=False
     DIRs = np.zeros([len(FARs), len(ranks)], dtype=np.float32)
     FARs = np.zeros([len(FARs)], dtype=np.float32)
     if get_false_indices:
-        false_retrieval = np.zeros([len(FARs), len(ranks), score_mat_m.shape[0]], dtype=np.bool)
-        false_reject = np.zeros([len(FARs), len(ranks), score_mat_m.shape[0]], dtype=np.bool)
-        false_accept = np.zeros([len(FARs), len(ranks), score_mat_nm.shape[0]], dtype=np.bool)
+        false_retrieval = np.zeros([len(FARs), len(ranks), score_mat_m.shape[0]], dtype="bool")
+        false_reject = np.zeros([len(FARs), len(ranks), score_mat_m.shape[0]], dtype="bool")
+        false_accept = np.zeros([len(FARs), len(ranks), score_mat_nm.shape[0]], dtype="bool")
     for i, threshold in enumerate(thresholds):
         for j, rank  in enumerate(ranks):
             success_retrieval = sorted_label_mat_m[:,0:rank].any(axis=1)
@@ -172,7 +172,7 @@ def DIR_FAR(score_mat, label_mat, ranks=[1], FARs=[1.0], get_false_indices=False
 def find_thresholds_by_FAR(score_vec, label_vec, FARs=None, epsilon=1e-5):
     assert len(score_vec.shape)==1
     assert score_vec.shape == label_vec.shape
-    assert label_vec.dtype == np.bool
+    assert label_vec.dtype == "bool"
     score_neg = score_vec[~label_vec]
     score_neg[::-1].sort()
     # score_neg = np.sort(score_neg)[::-1] # score from high to low

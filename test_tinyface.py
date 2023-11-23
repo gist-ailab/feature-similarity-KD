@@ -1,7 +1,6 @@
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 import torch.utils.data
-from torch.nn import DataParallel
 from backbone.iresnet import iresnet18, iresnet50
 import torchvision.transforms as transforms
 import argparse
@@ -18,6 +17,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
 from collections import OrderedDict
+
 
 class ListDataset(Dataset):
     def __init__(self, img_list):
@@ -39,7 +39,6 @@ class ListDataset(Dataset):
         img = Image.fromarray(img)
         img = self.transform(img)
         return img, idx
-
 
 
 def prepare_dataloader(img_list, batch_size, num_workers=0):
@@ -88,12 +87,6 @@ def infer(model, dataloader, use_flip_test):
 
 
 def load_model(args):
-    # gpu init
-    multi_gpus = False
-
-    if len(args.gpus.split(',')) > 1:
-        multi_gpus = True
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
     device = torch.device('cuda')
 
     # define backbone and margin layer
@@ -110,15 +103,13 @@ def load_model(args):
             new_ckpt[key] = value
     net.load_state_dict(new_ckpt, strict=False)
     
-    if multi_gpus:
-        net = DataParallel(net).to(device)
-    else:
-        net = net.to(device)
+    net = net.to(device)
 
     net.eval()
     return net
 
-def calc_accuracy(tinyface_test, probe, gallery, do_norm=True):
+
+def calc_accuracy(tinyface_test, probe, gallery, aligned, do_norm=True):
     if do_norm: 
         probe = probe / np.linalg.norm(probe, ord=2, axis=1).reshape(-1,1)
         gallery = gallery / np.linalg.norm(gallery, ord=2, axis=1).reshape(-1,1)
@@ -144,12 +135,16 @@ def calc_accuracy(tinyface_test, probe, gallery, do_norm=True):
         acc_list += [acc * 100]
     
     print(acc_list)
-    pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(args.save_dir, 'tinyface_result.csv'), index=False)
+
+    if aligned:
+        pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(args.save_dir, 'tinyface_aligned_result.csv'), index=False)
+    else:
+        pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(args.save_dir, 'tinyface_not_result.csv'), index=False)
     
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='tinyface')
-    parser.add_argument('--tinyface_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/aligned_pad_0.1_pad_high/')
+    parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/tinyface')
     parser.add_argument('--gpus', default='0', type=str)
     parser.add_argument('--batch_size', default=512, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
@@ -158,8 +153,16 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint_path', type=str, default='checkpoint/naive/iresnet50-E-IR/resol1-random/last_net.ckpt', help='scale size')
     parser.add_argument('--use_flip_test', type=str2bool, default='True')
     parser.add_argument('--qualnet', type=str2bool, default='False')
+    parser.add_argument('--aligned', type=str2bool, default='True')
     args = parser.parse_args()
     
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
+
+    if args.aligned:
+        args.tinyface_dir = os.path.join(args.data_dir, 'aligned_pad_0.1_pad_high')
+    else:
+        args.tinyface_dir = os.path.join(args.data_dir, 'Testing_Set')
+
     args.save_dir = os.path.join(os.path.dirname(args.checkpoint_path), 'tinyface_result')
     os.makedirs(args.save_dir, exist_ok=True)
     
@@ -177,5 +180,5 @@ if __name__ == '__main__':
     gallery_features = infer(model, gallery_loader, use_flip_test=args.use_flip_test)
     
     print('------------------ Start -------------------')
-    calc_accuracy(tinyface_test, probe_features, gallery_features, do_norm=True)
+    calc_accuracy(tinyface_test, probe_features, gallery_features, aligend=args.aligned, do_norm=True)
     print('------------------- End ---------------------')

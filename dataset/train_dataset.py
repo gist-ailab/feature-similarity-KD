@@ -69,7 +69,7 @@ class FaceDataset(data.Dataset):
 
         self.margin = margin
         if cross_sampling:
-            if self.margin < -1:
+            if self.margin < -2:
                 self.cross_dict = len(image_list)
             else:
                 with open(os.path.join(teacher_folder, 'cross_dict.pkl'), 'rb') as f:
