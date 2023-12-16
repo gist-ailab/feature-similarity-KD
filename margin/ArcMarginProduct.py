@@ -8,6 +8,7 @@ import torch.nn.functional as F
 
 class ArcMarginProduct(nn.Module):
     def __init__(self, in_feature=128, out_feature=10575, s=32.0, m=0.50, easy_margin=False):
+        # 0.5 default
         super(ArcMarginProduct, self).__init__()
         self.in_feature = in_feature
         self.out_feature = out_feature

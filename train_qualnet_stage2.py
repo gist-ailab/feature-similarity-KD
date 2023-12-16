@@ -13,7 +13,7 @@ from margin.ArcMarginProduct import ArcMarginProduct
 from margin.CosineMarginProduct import CosineMarginProduct
 from margin.AdaMarginProduct import AdaMarginProduct
 from utility.log import init_log
-from dataset.casia_webface import CASIAWebFace
+from dataset.train_dataset import FaceDataset
 from dataset.agedb import AgeDB30
 from dataset.cfp import CFP_FP
 from dataset.lfw import LFW
@@ -90,7 +90,7 @@ def train(args):
     ])
 
     # validation dataset
-    trainset = CASIAWebFace(args.train_root, args.train_file_list, args.down_size, transform=transform, equal=args.equal, interpolation_option=args.interpolation, cross_sampling=args.cross_sampling)
+    trainset = FaceDataset(args.train_root, 'casia', args.train_file_list, args.down_size, transform=transform, equal=args.equal, interpolation_option=args.interpolation)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
                                               shuffle=True, num_workers=8, drop_last=False)
     
@@ -104,11 +104,11 @@ def train(args):
 
     # Margin
     if args.margin_type == 'ArcFace':
-        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums)
+        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
     elif args.margin_type == 'CosFace':
-        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums)
+        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
     elif args.margin_type == 'AdaFace':
-        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums)
+        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
     else:
         print(args.margin_type, 'is not available!')
 
@@ -316,6 +316,8 @@ if __name__ == '__main__':
     
     parser.add_argument('--pretrained_student', type=lambda x: x.lower()=='true', default=True)
     
+    parser.add_argument('--margin_float', type=float)
+
     parser.add_argument('--margin_type', type=str, default='CosFace', help='ArcFace, CosFace, SphereFace, MultiMargin, Softmax')
     parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')

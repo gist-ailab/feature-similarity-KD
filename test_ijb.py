@@ -143,7 +143,7 @@ def identification(data_root, dataset_name, img_input_feats, save_dir, aligned):
 
     
 
-def verification(data_root, dataset_name, img_input_feats, save_dir, aligned):
+def verification(data_root, dataset_name, img_input_feats, save_dir, prefix, aligned):
     templates, medias = eval_helper_verification.read_template_media_list(
         os.path.join(data_root, '%s/meta' % dataset_name, '%s_face_tid_mid.txt' % dataset_name.lower()))
     p1, p2, label = eval_helper_verification.read_template_pair_list(
@@ -154,10 +154,12 @@ def verification(data_root, dataset_name, img_input_feats, save_dir, aligned):
     score = eval_helper_verification.verification(template_norm_feats, unique_templates, p1, p2)
 
     # # Step 5: Get ROC Curves and TPR@FPR Table
-    score_save_file = os.path.join(save_dir, "verification_score.npy")
+    score_save_file = os.path.join(save_dir, "verification_score_%s.npy" %prefix)
     np.save(score_save_file, score)
     result_files = [score_save_file]
-    eval_helper_verification.write_result(result_files, save_dir, aligned, dataset_name, label)
+
+    save_path = os.path.join(save_dir, prefix + '.pkl')
+    eval_helper_verification.write_result(result_files, save_path, aligned, dataset_name, label)
     os.remove(score_save_file)
 
 
@@ -171,7 +173,7 @@ def load_model(args):
         net = iresnet50(attention_type=args.mode, pooling=args.pooling, qualnet=args.qualnet)
 
     # Load Pretrained Teacher
-    net_ckpt = torch.load(os.path.join(args.checkpoint_path), map_location='cpu')['net_state_dict']
+    net_ckpt = torch.load(os.path.join(args.checkpoint_path, 'last_net.ckpt'), map_location='cpu')['net_state_dict']
     new_ckpt = OrderedDict()
     for key, value in net_ckpt.items():
         if ('conv_bridge' not in key) and ('hint' not in key):
@@ -187,15 +189,18 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='do ijb test')
     parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/ijb')
     parser.add_argument('--data_name', default='IJBC', type=str, help='dataset_name, set to IJBC or IJBB')
-    parser.add_argument('--gpus', default='0', type=str)
+    parser.add_argument('--gpus', default='3', type=str)
     parser.add_argument('--batch_size', default=512, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
     parser.add_argument('--backbone', type=str, default='iresnet50')
     parser.add_argument('--pooling', type=str, default='E') #
-    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/naive/iresnet50-E-IR/resol1-random/last_net.ckpt', help='scale size')
+    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/student-casia/iresnet50-E-IR-ArcFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}', help='scale size')
+    parser.add_argument('--save_dir', type=str, default='result/', help='scale size')
+    parser.add_argument('--prefix', type=str, default='aa', help='scale size')
+
     parser.add_argument('--use_flip_test', type=str2bool, default='True')
     parser.add_argument('--qualnet', type=str2bool, default='False')
-    parser.add_argument('--aligned', type=str2bool, default='True')
+    parser.add_argument('--aligned', type=str2bool, default='False')
     args = parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
@@ -207,7 +212,7 @@ if __name__ == '__main__':
     print('use_flip_test', args.use_flip_test)
     print('aligned', args.aligned)
 
-    args.save_dir = os.path.join(os.path.dirname(args.checkpoint_path), '%s_result' %args.data_name.lower())
+    # args.save_dir = os.path.join(os.path.dirname(args.checkpoint_path), '%s_result' %args.data_name.lower())
     os.makedirs(args.save_dir, exist_ok=True)
 
     model = load_model(args)
@@ -225,5 +230,5 @@ if __name__ == '__main__':
     print('Feature Shape: ({} , {}) .'.format(img_input_feats.shape[0], img_input_feats.shape[1]))
 
     # run protocol
-    identification(args.data_dir, data_name, img_input_feats, save_dir=args.save_dir, aligned=args.aligned)
-    verification(args.data_dir, data_name, img_input_feats, save_dir=args.save_dir, aligned=args.aligned)
+    # identification(args.data_dir, data_name, img_input_feats, save_dir=args.save_dir, aligned=args.aligned)
+    verification(args.data_dir, data_name, img_input_feats, save_dir=args.save_dir, prefix=args.prefix, aligned=args.aligned)

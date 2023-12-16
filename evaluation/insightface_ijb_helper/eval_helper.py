@@ -137,7 +137,6 @@ def read_score(path):
     return img_feats
 
 def write_result(result_files, save_path, aligned, dataset_name, label):
-
     methods = []
     scores = []
     for file in result_files:
@@ -189,11 +188,16 @@ def write_result(result_files, save_path, aligned, dataset_name, label):
     result = [tuple(filter(None, map(str.strip, splitline))) for line in str(tpr_fpr_table).splitlines()
                                                              for splitline in [line.split("|")] if len(splitline) > 1]
     
-    if aligned:
-        save_name = os.path.join(save_path, 'verification_aligned_result.csv')
-    else:
-        save_name = os.path.join(save_path, 'verification_not_result.csv')
+    save_result = {'0.01': float(result[1][-2]), '0.001': float(result[1][-3])}
+    with open(save_path, 'wb') as f:
+        pickle.dump(save_result, f)
+    print(save_result)
+    
+    # if aligned:
+    #     save_name = os.path.join(save_path, 'verification_aligned_result.csv')
+    # else:
+    #     save_name = os.path.join(save_path, 'verification_not_result.csv')
 
-    with open(save_name, 'w') as outcsv:
-        writer = csv.writer(outcsv)
-        writer.writerows(result)
+    # with open(save_name, 'w') as outcsv:
+    #     writer = csv.writer(outcsv)
+    #     writer.writerows(result)

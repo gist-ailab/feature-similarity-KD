@@ -17,7 +17,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
 from collections import OrderedDict
-
+import pickle
 
 class ListDataset(Dataset):
     def __init__(self, img_list):
@@ -34,6 +34,7 @@ class ListDataset(Dataset):
         image_path = self.img_list[idx]
         img = cv2.imread(image_path)
         img = img[:, :, :3]
+        img = cv2.resize(img, dsize=(112, 112), interpolation=cv2.INTER_LINEAR)
 
         # To Tensor
         img = Image.fromarray(img)
@@ -96,12 +97,12 @@ def load_model(args):
         net = iresnet50(attention_type=args.mode, pooling=args.pooling, qualnet=args.qualnet)
 
     # Load Pretrained Teacher
-    net_ckpt = torch.load(os.path.join(args.checkpoint_path), map_location='cpu')['net_state_dict']
+    net_ckpt = torch.load(os.path.join(args.checkpoint_path, 'last_net.ckpt'), map_location='cpu')['net_state_dict']
     new_ckpt = OrderedDict()
     for key, value in net_ckpt.items():
         if ('conv_bridge' not in key) and ('hint' not in key):
             new_ckpt[key] = value
-    net.load_state_dict(new_ckpt, strict=False)
+    net.load_state_dict(new_ckpt, strict=True)
     
     net = net.to(device)
 
@@ -134,12 +135,17 @@ def calc_accuracy(tinyface_test, probe, gallery, aligned, do_norm=True):
         acc = correct / len(p_l)
         acc_list += [acc * 100]
     
-    print(acc_list)
 
-    if aligned:
-        pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(args.save_dir, 'tinyface_aligned_result.csv'), index=False)
-    else:
-        pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(args.save_dir, 'tinyface_not_result.csv'), index=False)
+    print('------------------------------------------------------------')
+    result = {'rank1': acc_list[0], 'rank5': acc_list[1], 'rank10': acc_list[2], 'rank20': acc_list[3]}
+    with open(os.path.join(args.save_dir, args.prefix + '.pkl'), 'wb') as f:
+        pickle.dump(result, f)
+    print(result)
+    
+    # if aligned:
+    #     pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(args.save_dir, 'tinyface_aligned_result.csv'), index=False)
+    # else:
+    #     pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(args.save_dir, 'tinyface_not_result.csv'), index=False)
     
 
 if __name__ == '__main__':
@@ -149,11 +155,15 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', default=512, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
     parser.add_argument('--backbone', type=str, default='iresnet50')
-    parser.add_argument('--pooling', type=str, default='A') #
-    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/naive/iresnet50-E-IR/resol1-random/last_net.ckpt', help='scale size')
+    parser.add_argument('--pooling', type=str, default='E') #
+    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/student-casia/iresnet18-E-IR-ArcFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}', help='scale size')
+
+    parser.add_argument('--save_dir', type=str, default='imp/', help='scale size')
+    parser.add_argument('--prefix', type=str, default='aa', help='scale size')
+    
     parser.add_argument('--use_flip_test', type=str2bool, default='True')
     parser.add_argument('--qualnet', type=str2bool, default='False')
-    parser.add_argument('--aligned', type=str2bool, default='True')
+    parser.add_argument('--aligned', type=str2bool, default='False')
     args = parser.parse_args()
     
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
@@ -163,7 +173,7 @@ if __name__ == '__main__':
     else:
         args.tinyface_dir = os.path.join(args.data_dir, 'Testing_Set')
 
-    args.save_dir = os.path.join(os.path.dirname(args.checkpoint_path), 'tinyface_result')
+    # args.save_dir = os.path.join(os.path.dirname(args.checkpoint_path), 'tinyface_result')
     os.makedirs(args.save_dir, exist_ok=True)
     
     # load model
@@ -180,5 +190,5 @@ if __name__ == '__main__':
     gallery_features = infer(model, gallery_loader, use_flip_test=args.use_flip_test)
     
     print('------------------ Start -------------------')
-    calc_accuracy(tinyface_test, probe_features, gallery_features, aligend=args.aligned, do_norm=True)
+    calc_accuracy(tinyface_test, probe_features, gallery_features, aligned=args.aligned, do_norm=True)
     print('------------------- End ---------------------')

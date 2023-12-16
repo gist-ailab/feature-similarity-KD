@@ -46,7 +46,7 @@ class cross_kd(nn.Module):
         
         # Attention Loss
         distill_loss = (self.attention_loss(R_HH, R_HL) + self.attention_loss(R_HH, R_LH)) / 2 +\
-                       self.attention_loss(R_HH, R_LL)
+                    self.attention_loss(R_HH, R_LL)
         return distill_loss
     
     def relation(self, x1, x2):

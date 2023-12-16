@@ -1,7 +1,7 @@
 # Teacher Training
 for MARGIN in CosFace ArcFace AdaFace
 do 
-    for SEED in 5 4 3 2 1
+    for SEED in 5
     do
         RESOLUTION=0
         BACKBONE=iresnet50
@@ -15,7 +15,7 @@ done
 # Student Training
 for MARGIN in CosFace ArcFace AdaFace
 do
-    for SEED in 5 4 3 2 1
+    for SEED in 5
     do
         METHOD=A_SKD
         BACKBONE=iresnet50
@@ -28,6 +28,6 @@ do
                                 --backbone $BACKBONE --mode cbam --interpolation $INTERPOLATION --margin_type $MARGIN --pooling $POOLING \
                                 --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER \
                                 --save_dir checkpoint/student-casia/$BACKBONE-$POOLING-CBAM-$MARGIN/resol$RESOLUTION-$INTERPOLATION/$METHOD-P{$PARAM}/seed{$SEED} \
-                                --cross_sampling False --hint_bn False
+                                --cross_sampling False --hint_bn False --margin_float 0.2
     done
 done

@@ -97,13 +97,13 @@ def train(args):
         
     # Head
     if args.margin_type == 'ArcFace':
-        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums)
+        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
     elif args.margin_type == 'CosFace':
-        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums)
+        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
     elif args.margin_type == 'AdaFace':
-        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums)
+        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
     elif args.margin_type == 'MagFace':
-        margin = MagMarginProduct(args.feature_dim, trainset.class_nums)
+        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
     else:
         print(args.margin_type, 'is not available!')
 
@@ -392,8 +392,10 @@ if __name__ == '__main__':
     parser.add_argument('--interpolation', type=str, default='random') # 
     parser.add_argument('--pooling', type=str, default='E') #
 
+    parser.add_argument('--margin_float', type=float)
+
     parser.add_argument('--global_rank', type=int, default=0)
-    parser.add_argument("--local_rank", type=int, help="Local rank. Necessary for using the torch.distributed.launch utility.")
+    parser.add_argument("--local-rank", type=int, help="Local rank. Necessary for using the torch.distributed.launch utility.")
     parser.add_argument('--world_size', type=int, default=0)
     parser.add_argument('--port', type=int, default=2022)
 

@@ -7,6 +7,7 @@ base_folder = str(pathlib.Path(__file__).parent.resolve())
 os.chdir(base_folder)
 import torch.utils.data
 from backbone.iresnet import iresnet18, iresnet50
+from backbone.mobilenet import get_mbf_large
 from torch.nn import DataParallel
 from margin.ArcMarginProduct import ArcMarginProduct
 from margin.CosineMarginProduct import CosineMarginProduct
@@ -29,7 +30,7 @@ from tqdm import tqdm
 import torch.nn.functional as F
 from copy import deepcopy
 import random
-from metric.distill_loss import cosine_loss, normalize, cross_kd, cross_sample_kd, RKD_cri, AT_cri, mse_loss
+from metric.distill_loss import cosine_loss, cross_sample_kd, RKD_cri, AT_cri, mse_loss
 from collections import OrderedDict
 from utility.hook import feature_hook
 
@@ -74,21 +75,31 @@ def train(args):
                             teacher_folder=os.path.dirname(args.teacher_path), cross_sampling=args.cross_sampling, margin=args.cross_margin)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8, drop_last=False)
 
+
+    if ('F_SKD' in args.distill_type) or (args.distill_type == 'FitNet'):
+        hint_layer = True
+    else:
+        hint_layer = False
+        
+        
     # define backbone and margin layer
     if args.backbone == 'iresnet50':
-        net = iresnet50(attention_type=args.mode, pooling=args.pooling, student=True, hint_bn=args.hint_bn)
+        net = iresnet50(attention_type=args.mode, pooling=args.pooling, student=hint_layer, hint_bn=args.hint_bn)
     elif args.backbone == 'iresnet18':
-        net = iresnet18(attention_type=args.mode, pooling=args.pooling, student=True, hint_bn=args.hint_bn)
+        net = iresnet18(attention_type=args.mode, pooling=args.pooling, student=hint_layer, hint_bn=args.hint_bn)
+    elif args.backbone == 'mobilenet':
+        net = get_mbf_large(fp16=False, num_features=args.feature_dim, student=hint_layer, hint_bn=args.hint_bn)
+
 
     # Margin
     if args.margin_type == 'ArcFace':
-        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums)
+        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
     elif args.margin_type == 'CosFace':
-        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums)
+        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
     elif args.margin_type == 'AdaFace':
-        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums)
+        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
     elif args.margin_type == 'MagFace':
-        margin = MagMarginProduct(args.feature_dim, trainset.class_nums)
+        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
     else:
         print(args.margin_type, 'is not available!')
 
@@ -296,7 +307,7 @@ def train(args):
                 else:
                     new_correct_index = list(range(torch.sum(correct_index).item()))
                     random.shuffle(new_correct_index)
-                    cross_loss += cross_kd()(LR_feat_list[-1][correct_index], LR_feat_list[-1][correct_index][new_correct_index],
+                    cross_loss += cross_sample_kd()(LR_feat_list[-1][correct_index], LR_feat_list[-1][correct_index][new_correct_index],
                                              HR_feat_list[-1][correct_index], HR_feat_list[-1][correct_index][new_correct_index])
                 
             distill_loss = point_loss * distill_param[0] + cross_loss * distill_param[1]
@@ -527,16 +538,18 @@ if __name__ == '__main__':
     parser.add_argument('--interpolation', type=str, default='random')
     parser.add_argument('--pooling', type=str, default='E')
     
+    parser.add_argument('--margin_float', type=float)
+    
     parser.add_argument('--margin_type', type=str, default='CosFace', help='ArcFace, CosFace, SphereFace, MultiMargin, Softmax')
     parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
     parser.add_argument('--equal', type=lambda x: x.lower()=='true', default=True)
-    parser.add_argument('--gpus', type=str, default='0,1', help='model prefix')
+    parser.add_argument('--gpus', type=str, default='0', help='model prefix')
     parser.add_argument('--seed', type=int, default=1)
     
     parser.add_argument('--hint_bn', type=lambda x: x.lower()=='true', default=True)
-    parser.add_argument('--cross_sampling', type=lambda x: x.lower()=='true', default=True)
+    parser.add_argument('--cross_sampling', type=lambda x: x.lower()=='true', default=False)
     parser.add_argument('--cross_margin', type=float, default=0.5)
     parser.add_argument('--distill_param', type=str, default='1.0,1.0', help='hyperparams for distillation loss')
     parser.add_argument('--distill_type', type=str, default='F_SKD_BLOCK', help='distillation types')
