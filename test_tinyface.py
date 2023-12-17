@@ -102,7 +102,7 @@ def load_model(args):
     for key, value in net_ckpt.items():
         if ('conv_bridge' not in key) and ('hint' not in key):
             new_ckpt[key] = value
-    net.load_state_dict(new_ckpt, strict=True)
+    net.load_state_dict(new_ckpt, strict=False)
     
     net = net.to(device)
 

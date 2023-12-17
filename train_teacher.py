@@ -8,6 +8,7 @@ os.chdir(base_folder)
 import torch.utils.data
 from torch.nn import DataParallel
 from backbone.iresnet import iresnet18, iresnet50
+from backbone.mobilenet import get_mbf_large
 from margin.ArcMarginProduct import ArcMarginProduct
 from margin.CosineMarginProduct import CosineMarginProduct
 from margin.AdaMarginProduct import AdaMarginProduct
@@ -70,7 +71,9 @@ def train(args):
         net = iresnet50(attention_type=args.mode, pooling=args.pooling)
     elif args.backbone == 'iresnet18':
         net = iresnet18(attention_type=args.mode, pooling=args.pooling)    
-        
+    elif args.backbone == 'mobilenet':
+        net = get_mbf_large(fp16=False, num_features=args.feature_dim)
+
     # Head
     if args.margin_type == 'ArcFace':
         margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
