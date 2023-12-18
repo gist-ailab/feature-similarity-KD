@@ -8,6 +8,7 @@ os.chdir(base_folder)
 import pickle
 import torch.utils.data
 from backbone.iresnet import iresnet18, iresnet50
+from backbone.mobilenet import get_mbf_large
 from torch.nn import DataParallel
 from dataset.agedb import AgeDB30
 from dataset.cfp import CFP_FP
@@ -70,6 +71,8 @@ def inference(args):
         net = iresnet18(attention_type=args.mode, pooling=args.pooling, qualnet=args.qualnet)
     elif args.backbone == 'iresnet50':
         net = iresnet50(attention_type=args.mode, pooling=args.pooling, qualnet=args.qualnet)
+    elif args.backbone == 'mobilenet':
+        net = get_mbf_large(fp16=False, num_features=args.feature_dim)
 
     # Load Pretrained Teacher
     net_ckpt = torch.load(os.path.join(args.checkpoint_dir, 'last_net.ckpt'), map_location='cpu')['net_state_dict']
@@ -172,7 +175,8 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset')
     parser.add_argument('--down_size', type=int, default=1) # 1 : all type, 0 : high, others : low
     parser.add_argument('--checkpoint_dir', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/checkpoint/test/student-casia/iresnet50-E-IR-CosFace/resol1-random/F_SKD_CROSS-P{20.0,4.0}-hint-BN{True}', help='model save dir')
-    
+    parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
+
     parser.add_argument('--save_dir', type=str, default='imp/', help='result save dir')
     parser.add_argument('--prefix', type=str, default='aaa', help='prefix name')
     parser.add_argument('--eval_dataset', type=str, default='agedb30', help='save dataset')

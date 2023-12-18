@@ -25,9 +25,8 @@ if __name__=='__main__':
     else:
         print('------------ AgeDB30 -------------')
         for margin in ['CosFace', 'ArcFace', 'AdaFace']:
-            seed_list = [1,2,3,4,5]
             result_list = []
-            for seed in [1,2,3,4,5]:
+            for seed in [5]:
                 with open(os.path.join(save_dir, '%s_%d.pkl' %(margin, seed)), 'rb') as f:
                     result = pickle.load(f)
                 
@@ -40,9 +39,8 @@ if __name__=='__main__':
 
         print('------------ LFW -------------')
         for margin in ['CosFace', 'ArcFace', 'AdaFace']:
-            seed_list = [1,2,3,4,5]
             result_list = []
-            for seed in [1,2,3,4,5]:
+            for seed in [5]:
                 with open(os.path.join(save_dir, '%s_%d.pkl' %(margin, seed)), 'rb') as f:
                     result = pickle.load(f)
                 
@@ -55,9 +53,8 @@ if __name__=='__main__':
 
         print('------------ CFP-FP -------------')
         for margin in ['CosFace', 'ArcFace', 'AdaFace']:
-            seed_list = [1,2,3,4,5]
             result_list = []
-            for seed in [1,2,3,4,5]:
+            for seed in [5]:
                 with open(os.path.join(save_dir, '%s_%d.pkl' %(margin, seed)), 'rb') as f:
                     result = pickle.load(f)
                 
