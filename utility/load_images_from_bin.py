@@ -76,17 +76,17 @@ if __name__=='__main__':
     data_dir = args.data_dir
     
     if data_type == 'evaluation':
-        bin_path = os.path.join(data_dir, 'faces_webface_112x112', 'agedb_30.bin')
+        bin_path = os.path.join(data_dir, args.data_name, 'agedb_30.bin')
         save_dir = os.path.join(data_dir, 'evaluation', 'agedb_30')
         name = 'agedb_30'
         load_image_from_bin(bin_path, save_dir, name)
 
-        bin_path = os.path.join(data_dir, 'faces_webface_112x112', 'lfw.bin')
+        bin_path = os.path.join(data_dir, args.data_name, 'lfw.bin')
         save_dir = os.path.join(data_dir, 'evaluation', 'lfw')
         name = 'lfw'
         load_image_from_bin(bin_path, save_dir, name)
         
-        bin_path = os.path.join(data_dir, 'faces_webface_112x112', 'cfp_fp.bin')
+        bin_path = os.path.join(data_dir, args.data_name, 'cfp_fp.bin')
         save_dir = os.path.join(data_dir, 'evaluation', 'cfp_fp')
         name = 'cfp_fp'
         load_image_from_bin(bin_path, save_dir, name)

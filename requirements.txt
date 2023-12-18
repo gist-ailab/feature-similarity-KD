@@ -2,5 +2,5 @@ scipy
 mxnet
 numpy
 tqdm
-opencv-python==4.4.0.46
+opencv-python
 prettytable
