@@ -73,6 +73,7 @@ def infer_images(model, img_root, landmark_list_path, batch_size, use_flip_test,
                 features.append(fused_feature.cpu().numpy())
             else:
                 features.append(feature.cpu().numpy())
+            
 
     features = np.concatenate(features, axis=0)
     img_feats = np.array(features).astype(np.float32)
