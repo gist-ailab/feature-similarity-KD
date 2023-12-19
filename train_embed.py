@@ -57,7 +57,7 @@ def selection(args):
 
     # validation dataset
     trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, 0, transform=transform, equal=args.equal, interpolation_option=args.interpolation)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=False, num_workers=8, drop_last=False)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
 
     # define backbone and margin layer
     net = iresnet50(attention_type=args.mode, pooling=args.pooling)
@@ -106,7 +106,7 @@ def selection(args):
         similarity_ii[similarity_ii > 0.99] = 0.0
 
         out_dict = {}
-        for margin in [-1.0, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+        for margin in [0.0]:
             index = torch.where(similarity_ii > margin)[0]
             out_dict['pos_m{%.1f}' %margin] = gt_index[index].tolist()
         

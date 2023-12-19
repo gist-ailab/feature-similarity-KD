@@ -34,6 +34,7 @@ done
 ## Teacher Training
 for MARGIN in CosFace
 do
+    BACKBONE=iresnet50
     SEED=5
     DATASET=ms1mv2
     RESOLUTION=1
