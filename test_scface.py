@@ -110,36 +110,38 @@ def calc_accuracy(probe_feats, probe_labels, gallery_feats, gallery_labels, dist
     print(acc_list)
 
     if aligned:
-        pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(args.save_dir, 'scface_dist%d_aligned_result.csv' %(dist)), index=False)
+        pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(save_dir, 'scface_dist%d_aligned_result.csv' %(dist)), index=False)
     else:
-        pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(args.save_dir, 'scface_dist%d_not_result.csv' %(dist)), index=False)
+        pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(save_dir, 'scface_dist%d_not_result.csv' %(dist)), index=False)
     
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='do ijb test')
-    parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/scface')
+    parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/scface/crop')
     parser.add_argument('--gpus', default='0', type=str)
     parser.add_argument('--batch_size', default=512, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
     parser.add_argument('--backbone', type=str, default='iresnet50')
     parser.add_argument('--pooling', type=str, default='E') #
-    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/student-casia/iresnet50-E-IR-CosFace/resol1-random/F_SKD_BN-P{20.0,4.0}/seed{5}/last_net.ckpt', help='scale size')
+    parser.add_argument('--checkpoint_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/checkpoint/student-casia/iresnet50-E-IR-CosFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}/last_net.ckpt', help='scale size')
+    parser.add_argument('--save_dir', type=str, default='imp/', help='scale size')
     parser.add_argument('--use_flip_test', type=str2bool, default='True')
     parser.add_argument('--qualnet', type=str2bool, default='False')
-    parser.add_argument('--aligned', type=str2bool, default='True')
+    parser.add_argument('--aligned', type=str2bool, default='False')
     args = parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
 
     # Dataset
-    args.save_dir = os.path.join(os.path.dirname(args.checkpoint_path), 'scface_result')
     os.makedirs(args.save_dir, exist_ok=True)
 
     model = load_model(args)
+    
+    person_list = np.random.choice(list(range(1,131)), 50, replace=False)
 
     # get features and fuse
-    gallery_list = glob(os.path.join(args.data_dir, 'mugshot_frontal_cropped_all/*.JPG'))
-    gallery_labels = np.array(list(range(1, 131)))
+    gallery_list = [os.path.join(args.data_dir, 'gallery/%03d_frontal.JPG.jpg' %person_id) for person_id in person_list]
+    gallery_labels = np.array([int(os.path.basename(gallery_path).split('_')[0]) for gallery_path in gallery_list])
     gallery_feats = infer_images(model=model,
                                image_list=gallery_list,
                                landmark_list_path=None,
@@ -150,11 +152,11 @@ if __name__ == '__main__':
 
 
     # Evaluation for 3 Distances
-    for dist in [1, 2, 3]:
-        probe_labels = np.array(list(range(1, 131)) + list(range(1, 131)) + list(range(1, 131)) + list(range(1, 131)) + list(range(1, 131)))
-        probe_list = []
-        for cam in [1,2,3,4,5]:
-            probe_list += glob(os.path.join(args.data_dir, 'surveillance_cameras_distance_%d/cam_%d/*.jpg' %(dist, cam)))
+    for distance in [1, 2, 3]:
+        cam_list = [1,2,3,4,5]
+        basename_list = ['%03d_cam%d_%d.jpg' %(person_id, cam_id, distance) for person_id in person_list for cam_id in cam_list]
+        probe_list = [os.path.join(args.data_dir, 'probe', basename) for basename in basename_list]
+        probe_labels = np.array([int(os.path.basename(probe_path).split('_')[0]) for probe_path in probe_list])
 
         # run protocol
         probe_feats = infer_images(model=model,
@@ -166,5 +168,5 @@ if __name__ == '__main__':
                                      aligned=args.aligned)
 
         # Identification
-        calc_accuracy(probe_feats, probe_labels, gallery_feats, gallery_labels, dist, args.save_dir, args.aligned)
+        calc_accuracy(probe_feats, probe_labels, gallery_feats, gallery_labels, distance, args.save_dir, args.aligned, do_norm=True)
         

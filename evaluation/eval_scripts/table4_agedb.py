@@ -19,7 +19,7 @@ if __name__=='__main__':
     ckpt_dir = "/home/jovyan/SSDb/sung/src/feature-similarity-KD/checkpoint/"
     
     if stage == 1:
-        for backbone in ['mobilenet']:
+        for backbone in ['iresnet18']:
             for margin in ['CosFace']:
                 ckpt_list = [
                                 [os.path.join(ckpt_dir, 'naive-casia/%s-E-IR-%s/resol1-random' %(backbone, margin)), 'ir', 'naive-%s'%backbone],
@@ -52,15 +52,20 @@ if __name__=='__main__':
                                                                                    settings[1], seed), shell=True)
                 
     else:
-        ckpt_list = [['naive-mobilenet_ir', 'Naive'], ['fitnet-mobilenet_ir', 'FitNet'], ['at-mobilenet_ir', 'AT'], ['rkd-mobilenet_ir', 'RKD'], ['fskd-mobilenet_ir', 'Ours']]
-        seed = 5
-        margin='CosFace'
-        result_list = [] 
-        for ckpt_set in ckpt_list:
-            ckpt_name, prefix = ckpt_set[0], ckpt_set[1]
-            ckpt_path = ckpt_name + '_%s_%d.pkl' %(margin, seed)
-            with open(os.path.join(save_dir, ckpt_path), 'rb') as f:
-                result = pickle.load(f)['agedb30']
-            output = '%s & %.2f & %.2f & %.2f & %.2f & %.2f' %(prefix, result['112'], result['56'], result['28'], result['14'], (result['112'] + result['56'] + result['28'] + result['14'])/4)
-            result_list.append(output)
-        print(result_list)
+        for backbone in ['iresnet18']:
+            ckpt_list = [['naive-%s_ir'%backbone, 'Naive'], ['fitnet-%s_ir'%backbone, 'FitNet'], ['at-%s_ir'%backbone, 'AT'], ['rkd-%s_ir'%backbone, 'RKD'], ['fskd-%s_ir'%backbone, 'Ours']]
+            seed = 5
+            margin='CosFace'
+            result_list = [] 
+            for ckpt_set in ckpt_list:
+                ckpt_name, prefix = ckpt_set[0], ckpt_set[1]
+                ckpt_path = ckpt_name + '_%s_%d.pkl' %(margin, seed)
+                with open(os.path.join(save_dir, ckpt_path), 'rb') as f:
+                    result = pickle.load(f)['agedb30']
+                output = '%s & %.2f & %.2f & %.2f & %.2f & %.2f \n' %(prefix, result['112'], result['56'], result['28'], result['14'], (result['112'] + result['56'] + result['28'] + result['14'])/4)
+                result_list.append(output)
+            print(result_list)
+        
+            with open(os.path.join(save_dir, '%s.txt' %backbone), 'w') as f:
+                f.writelines(result_list)
+            

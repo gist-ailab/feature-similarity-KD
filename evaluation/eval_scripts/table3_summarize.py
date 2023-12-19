@@ -16,16 +16,16 @@ if __name__=='__main__':
             ckpt_name, prefix = ckpt_set
             ckpt_name = ckpt_name + '_%s_%d_aligned{%s}.pkl' %(margin, seed, aligned)
             
-            # # IJB-B
-            # ckpt_path = os.path.join(save_dir, 'IJBB', ckpt_name)
-            # with open(ckpt_path, 'rb') as f:
-            #     ijbb_result = pickle.load(f)
+            # IJB-B
+            ckpt_path = os.path.join(save_dir, 'IJBB', ckpt_name)
+            with open(ckpt_path, 'rb') as f:
+                ijbb_result = pickle.load(f)
             
             
-            # # IJB-C 
-            # ckpt_path = os.path.join(save_dir, 'IJBC', ckpt_name)
-            # with open(ckpt_path, 'rb') as f:
-            #     ijbc_result = pickle.load(f)
+            # IJB-C 
+            ckpt_path = os.path.join(save_dir, 'IJBC', ckpt_name)
+            with open(ckpt_path, 'rb') as f:
+                ijbc_result = pickle.load(f)
             
             # TinyFace
             ckpt_path = os.path.join(save_dir, 'tinyface', ckpt_name)
@@ -33,6 +33,7 @@ if __name__=='__main__':
                 tiny_result = pickle.load(f)
             
             output = '%s &    & %.2f & %.2f & %.2f \n' %(prefix, tiny_result['rank1'], tiny_result['rank10'], tiny_result['rank20'])
+            # output = '%s &    & %.2f & %.2f & %.2f \n' %(prefix, ijbb_result['0.001'], ijbc_result['0.001'], tiny_result['rank20'])
             result_list.append(output)
         
         with open(os.path.join(save_dir, 'aligned{%s}.txt' %aligned), 'w') as f:
