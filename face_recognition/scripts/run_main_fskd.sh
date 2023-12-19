@@ -162,3 +162,50 @@ do
 done
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#####################
+for MARGIN in CosFace ArcFace
+do
+    for SEED in 5
+    do
+        BACKBONE=iresnet18
+        METHOD=F_SKD_CROSS_BN
+        PARAM=20.0,4.0
+        CMARGIN=0.0
+        RESOLUTION=16
+        INTERPOLATION=random
+        POOLING=E
+        DATASET=casia
+        TEACHER=checkpoint/teacher-casia/iresnet50-$POOLING-IR-$MARGIN/seed{$SEED}/last_net.ckpt
+        python train_student.py  --gpus 0 --seed $SEED --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
+                                                       --backbone $BACKBONE --mode ir --interpolation $INTERPOLATION --margin_type $MARGIN --pooling $POOLING \
+                                                       --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER\
+                                                       --save_dir checkpoint/student-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/$METHOD-P{$PARAM}-M{$CMARGIN}/seed{$SEED} \
+                                                       --batch_size 256 --dataset $DATASET --cross_margin $CMARGIN --cross_sampling True --hint_bn True --margin_float 0.2
+    done
+done

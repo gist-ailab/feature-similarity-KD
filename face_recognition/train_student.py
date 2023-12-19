@@ -73,7 +73,7 @@ def train(args):
     trainset =  FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, 
                             equal=args.equal, interpolation_option=args.interpolation,
                             teacher_folder=os.path.dirname(args.teacher_path), cross_sampling=args.cross_sampling, margin=args.cross_margin)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8, drop_last=False)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=False)
 
 
     if ('F_SKD' in args.distill_type) or (args.distill_type == 'FitNet'):

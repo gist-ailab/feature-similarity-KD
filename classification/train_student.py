@@ -20,8 +20,8 @@ from backbone.vgg import vgg8
 parser = argparse.ArgumentParser(description='Propert ResNets for CIFAR10 in pytorch')
 parser.add_argument('--resolution', default=8, type=int)
 parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/svhn', type=str)
+parser.add_argument('--teacher_path', default='aa', type=str)
 
-parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet56')
 parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=200, type=int, metavar='N',
@@ -63,26 +63,19 @@ def main():
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
-    if 'resnet' in args.arch:
-        model = torch.nn.DataParallel(resnet.__dict__[args.arch]())
-    elif args.arch == 'vgg8':
-        model = torch.nn.DataParallel(vgg8(num_classes=10))
-    else:
-        raise('Error!')
-    model.cuda()
+    teacher_model = torch.nn.DataParallel(resnet.__dict__[args.arch]())
+    student_model = torch.nn.DataParallel(vgg8(num_classes=10))
 
+    teacher_model.cuda()
+    student_model.cuda()
+
+    teacher_model.eval()
+    for param in teacher_model.parameters():
+        param.requires_grad = False
+    
     # optionally resume from a checkpoint
-    if args.resume:
-        if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
-            best_prec1 = checkpoint['best_prec1']
-            model.load_state_dict(checkpoint['state_dict'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.evaluate, checkpoint['epoch']))
-        else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
+    teacher_checkpoint = torch.load(args.teacher_path)
+    teacher_model.load_state_dict(teacher_checkpoint['state_dict'])
 
     cudnn.benchmark = True
 
