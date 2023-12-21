@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description='Propert ResNets for CIFAR10 in pyt
 parser.add_argument('--resolution', default=8, type=int)
 parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/svhn', type=str)
 
-parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet56')
+parser.add_argument('--arch', '-a', metavar='ARCH', default='vgg8')
 parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=200, type=int, metavar='N',
@@ -48,7 +48,7 @@ parser.add_argument('--half', dest='half', action='store_true',
                     help='use half-precision(16-bit) ')
 parser.add_argument('--save-dir', dest='save_dir',
                     help='The directory used to save the trained models',
-                    default='save_temp', type=str)
+                    default='imp', type=str)
 parser.add_argument('--save-every', dest='save_every',
                     help='Saves checkpoints at every specified number of epochs',
                     type=int, default=10)

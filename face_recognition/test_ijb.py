@@ -189,7 +189,7 @@ def load_model(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='do ijb test')
     parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/ijb')
-    parser.add_argument('--data_name', default='IJBC', type=str, help='dataset_name, set to IJBC or IJBB')
+    parser.add_argument('--data_name', default='IJBB', type=str, help='dataset_name, set to IJBC or IJBB')
     parser.add_argument('--gpus', default='3', type=str)
     parser.add_argument('--batch_size', default=512, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')

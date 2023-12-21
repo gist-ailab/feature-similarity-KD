@@ -151,12 +151,12 @@ def calc_accuracy(tinyface_test, probe, gallery, aligned, do_norm=True):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='tinyface')
     parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/tinyface')
-    parser.add_argument('--gpus', default='0', type=str)
+    parser.add_argument('--gpus', default='1', type=str)
     parser.add_argument('--batch_size', default=512, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
-    parser.add_argument('--backbone', type=str, default='iresnet50')
+    parser.add_argument('--backbone', type=str, default='iresnet18')
     parser.add_argument('--pooling', type=str, default='E') #
-    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/student-casia/iresnet18-E-IR-ArcFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}', help='scale size')
+    parser.add_argument('--checkpoint_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/student-casia/iresnet18-E-IR-CosFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}', help='scale size')
 
     parser.add_argument('--save_dir', type=str, default='imp/', help='scale size')
     parser.add_argument('--prefix', type=str, default='aa', help='scale size')

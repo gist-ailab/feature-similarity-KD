@@ -6,7 +6,8 @@ import argparse
 import matplotlib
 matplotlib.use('Agg')
 from evaluation.insightface_ijb_helper.dataloader import prepare_dataloader
-from evaluation.insightface_ijb_helper import eval_helper_identification
+from evaluation.insightface_ijb_helper import eval_helper as eval_helper_verification
+import cv2
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -15,14 +16,16 @@ from tqdm import tqdm
 import pandas as pd
 from collections import OrderedDict
 from glob import glob
-import cv2
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
+from scipy.io import loadmat
+from sklearn.metrics import roc_curve, auc
 
-class SCFACE_DATASET(Dataset):
+
+class DATASET(Dataset):
     def __init__(self, img_list, image_is_saved_with_swapped_B_and_R=False):
-        super(SCFACE_DATASET, self).__init__()
+        super(DATASET, self).__init__()
 
         # image_is_saved_with_swapped_B_and_R: correctly saved image should have this set to False
         # face_emore/img has images saved with B and G (of RGB) swapped.
@@ -43,6 +46,8 @@ class SCFACE_DATASET(Dataset):
         image_path = self.img_list[idx]
 
         img = cv2.imread(image_path)
+        img = img[:, :, :3]
+
         img = cv2.resize(img, dsize=(112, 112))
 
         if self.image_is_saved_with_swapped_B_and_R:
@@ -50,8 +55,8 @@ class SCFACE_DATASET(Dataset):
 
         img = Image.fromarray(img)
         img = self.transform(img)
-        return img, idx
-
+        return img, idx, os.path.basename(image_path)
+    
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -68,9 +73,8 @@ def l2_norm(input, axis=1):
     output = torch.div(input, norm)
     return output, norm
 
-
-def infer_images(model, image_list, landmark_list_path, batch_size, use_flip_test, qualnet=False):
-    dataset = SCFACE_DATASET(image_list)
+def infer_images(model, image_list, batch_size, use_flip_test, qualnet=False):
+    dataset = DATASET(image_list)
     dataloader = DataLoader(dataset,
                             batch_size=batch_size,
                             shuffle=False,
@@ -78,8 +82,9 @@ def infer_images(model, image_list, landmark_list_path, batch_size, use_flip_tes
                             num_workers=4)
     model.eval()
     features = []
+    pathes = []
     with torch.no_grad():
-        for images, idx in tqdm(dataloader):
+        for images, idx, path in tqdm(dataloader):
             feature = model(images.to("cuda"))
             if qualnet:
                 feature = feature[0]
@@ -95,10 +100,52 @@ def infer_images(model, image_list, landmark_list_path, batch_size, use_flip_tes
             else:
                 features.append(feature.cpu().numpy())
 
+            pathes.append(path)
+
     features = np.concatenate(features, axis=0)
+    pathes = np.concatenate(pathes, axis=0)
+
     img_feats = np.array(features).astype(np.float32)
     assert len(features) == len(image_list)
-    return img_feats
+    return img_feats, pathes
+
+def verification(features, path_list, pos_pair, neg_pair, save_dir, prefix, do_norm=True):
+    if do_norm: 
+        features = features / np.linalg.norm(features, ord=2, axis=1).reshape(-1,1)
+
+    # Get Score
+    score_list, label_list = [], []
+    for pos_path in pos_pair:
+        p_l = features[np.where(path_list == pos_path[0])[0]][0]
+        p_r = features[np.where(path_list == pos_path[1])[0]][0]
+        score = np.sum(p_l * p_r)
+        score_list.append(score)
+        label_list.append(1)
+
+    for neg_path in neg_pair:
+        n_l = features[np.where(path_list == neg_path[0])[0]][0]
+        n_r = features[np.where(path_list == neg_path[1])[0]][0]
+        score = np.sum(n_l * n_r)
+        score_list.append(score)
+        label_list.append(0)
+
+    score_list, label_list = np.array(score_list), np.array(label_list)
+
+    # Calculate
+    fpr, tpr, _ = roc_curve(label_list, score_list)
+    roc_auc = auc(fpr, tpr)
+    fpr = np.flipud(fpr)
+    tpr = np.flipud(tpr)  # select largest tpr at same fpr
+    
+    tpr_fpr_row = []
+    tpr_fpr_row.append("QMUL-Surv-Verification")
+    x_labels = [0.001, 0.01, 0.1, 0.3]
+    for fpr_iter in np.arange(len(x_labels)):
+        _, min_index = min(
+            list(zip(abs(fpr - x_labels[fpr_iter]), range(len(fpr)))))
+        tpr_fpr_row.append('%.2f' % (tpr[min_index] * 100))
+    
+    print(tpr_fpr_row)
 
 
 def load_model(args):
@@ -111,52 +158,30 @@ def load_model(args):
         net = iresnet50(attention_type=args.mode, pooling=args.pooling, qualnet=args.qualnet)
 
     # Load Pretrained Teacher
-    net_ckpt = torch.load(os.path.join(args.checkpoint_path), map_location='cpu')['net_state_dict']
+    net_ckpt = torch.load(os.path.join(args.checkpoint_path, 'last_net.ckpt'), map_location='cpu')['net_state_dict']
     new_ckpt = OrderedDict()
     for key, value in net_ckpt.items():
         if ('conv_bridge' not in key) and ('hint' not in key):
             new_ckpt[key] = value
-    net.load_state_dict(new_ckpt, strict=True)
+    net.load_state_dict(new_ckpt, strict=False)
 
     net = net.to(device)
     net.eval()
     return net
 
-def calc_accuracy(probe_feats, p_l, gallery_feats, g_l, dist, save_dir, do_norm=True):
-    if do_norm: 
-        probe_feats = probe_feats / np.linalg.norm(probe_feats, ord=2, axis=1).reshape(-1,1)
-        gallery_feats =  gallery_feats / np.linalg.norm(gallery_feats, ord=2, axis=1).reshape(-1,1)
-        
-    # Similarity
-    result = (probe_feats @ gallery_feats.T)
-    index = np.argsort(-result, axis=1)
-    
-    acc_list = []
-    for rank in [1, 5, 10, 20]:
-        correct = 0
-        for ix, probe_label in enumerate(p_l):
-            pred_label = g_l[index[ix][:rank]]
-            
-            if probe_label in pred_label:
-                correct += 1
-                
-        acc = correct / len(p_l)
-        acc_list += [acc * 100]
-    
-    print(acc_list)
-    pd.DataFrame({'rank':[1, 5, 10, 20], 'values':acc_list}).to_csv(os.path.join(save_dir, 'scface_dist%d_not_result.csv' %(dist)), index=False)
-    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='do ijb test')
-    parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/scface_chen/SCFace_MTCNN/test_80')
+    parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/QMUL-SurvFace/Face_Verification_Test_Set/')
     parser.add_argument('--gpus', default='0', type=str)
     parser.add_argument('--batch_size', default=512, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
     parser.add_argument('--backbone', type=str, default='iresnet50')
     parser.add_argument('--pooling', type=str, default='E') #
-    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/test/old_result_(m=default)/student-casia/iresnet50-E-IR-CosFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}/last_net.ckpt', help='scale size')
-    parser.add_argument('--save_dir', type=str, default='imp/', help='scale size')
+    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/student-casia/iresnet50-E-IR-ArcFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}', help='scale size')
+    parser.add_argument('--save_dir', type=str, default='result/', help='scale size')
+    parser.add_argument('--prefix', type=str, default='aa', help='scale size')
+
     parser.add_argument('--use_flip_test', type=str2bool, default='True')
     parser.add_argument('--qualnet', type=str2bool, default='False')
     args = parser.parse_args()
@@ -164,33 +189,23 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
 
     # Dataset
+    print('use_flip_test', args.use_flip_test)
     os.makedirs(args.save_dir, exist_ok=True)
+
     model = load_model(args)
-    
+
     # get features and fuse
-    gallery_list = glob(os.path.join(args.data_dir, 'gallery/*/*.jpg'))
-    gallery_labels = np.array([int(os.path.basename(gallery_path).split('_')[0]) for gallery_path in gallery_list])
-    gallery_feats = infer_images(model=model,
-                               image_list=gallery_list,
-                               landmark_list_path=None,
-                               batch_size=args.batch_size,
-                               use_flip_test=args.use_flip_test,
-                               qualnet=args.qualnet)
+    image_list = glob(os.path.join(args.data_dir, 'verification_images/*.jpg'))
+    image_feats, pathes = infer_images(model=model,
+                                        image_list=image_list,
+                                        batch_size=args.batch_size,
+                                        use_flip_test=args.use_flip_test,
+                                        qualnet=args.qualnet)
+    
+    positive_pair = loadmat(os.path.join(args.data_dir, 'positive_pairs_names.mat'))['positive_pairs_names'] 
+    negative_pair = loadmat(os.path.join(args.data_dir, 'negative_pairs_names.mat'))['negative_pairs_names'] 
 
-
-    # Evaluation for 3 Distances
-    distance = 1
-    probe_list = glob(os.path.join(args.data_dir, 'probe_d%d/*/*.jpg') %distance)
-    probe_labels = np.array([int(os.path.basename(probe_path).split('_')[0]) for probe_path in probe_list])
 
     # run protocol
-    probe_feats = infer_images(model=model,
-                                image_list=probe_list,
-                                landmark_list_path=None,
-                                batch_size=args.batch_size,
-                                use_flip_test=args.use_flip_test,
-                                qualnet=args.qualnet)
-
-    # Identification
-    calc_accuracy(probe_feats, probe_labels, gallery_feats, gallery_labels, distance, args.save_dir, do_norm=True)
-        
+    # identification(args.data_dir, data_name, img_input_feats, save_dir=args.save_dir, aligned=args.aligned)
+    verification(image_feats, pathes, positive_pair, negative_pair, save_dir=args.save_dir, prefix=args.prefix)

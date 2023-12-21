@@ -19,9 +19,25 @@ model_urls = {
     'vgg19': 'https://download.pytorch.org/models/vgg19-dcbb9e9d.pth',
 }
 
+class HintLayer(nn.Module):
+    def __init__(self, inplane, planes, bn=False):
+        super(HintLayer, self).__init__()
+        self.hint = nn.Conv2d(inplane, planes, stride=1, kernel_size=1, padding=0, bias=False)
+
+        if bn:
+            self.bn = nn.BatchNorm2d(planes, eps=1e-05,)
+        else:
+            self.bn = None
+        
+    def forward(self, x):
+        out = self.hint(x)
+        if self.bn is not None:
+            out = self.bn(out)
+        return out
+    
 
 class VGG(nn.Module):
-    def __init__(self, cfg, batch_norm=False, num_classes=1000):
+    def __init__(self, cfg, batch_norm=False, num_classes=1000, student=False):
         super(VGG, self).__init__()
         self.block0 = self._make_layers(cfg[0], batch_norm, 3)
         self.block1 = self._make_layers(cfg[1], batch_norm, cfg[0][-1])
@@ -29,12 +45,20 @@ class VGG(nn.Module):
         self.block3 = self._make_layers(cfg[3], batch_norm, cfg[2][-1])
         self.block4 = self._make_layers(cfg[4], batch_norm, cfg[3][-1])
 
+
+        self.student = student
+        if self.student:
+            self.hint_layer0 = HintLayer(64, 16, bn=True)
+            self.hint_layer1 = HintLayer(128, 32, bn=True)
+            self.hint_layer2 = HintLayer(256, 64, bn=True)
+        else:
+            self.hint_layer0, self.hint_layer1, self.hint_layer2 = None, None, None
+        
         self.pool0 = nn.MaxPool2d(kernel_size=2, stride=2)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
         self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
         self.pool4 = nn.AdaptiveAvgPool2d((1, 1))
-        # self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.classifier = nn.Linear(512, num_classes)
         self._initialize_weights()
@@ -60,41 +84,43 @@ class VGG(nn.Module):
         bn4 = self.block4[-1]
         return [bn1, bn2, bn3, bn4]
 
-    def forward(self, x, is_feat=False, preact=False):
-        h = x.shape[2]
+    def forward(self, x, extract_feat=False):
         x = F.relu(self.block0(x))
-        f0 = x
+        if self.student:
+            f0 = self.hint_layer0(x)
+        else:
+            f0 = x
+        
         x = self.pool0(x)
         x = self.block1(x)
-        f1_pre = x
         x = F.relu(x)
-        f1 = x
+        if self.student:
+            f1 = self.hint_layer1(x)
+        else:
+            f1 = x
+
         x = self.pool1(x)
         x = self.block2(x)
-        f2_pre = x
         x = F.relu(x)
-        f2 = x
+        if self.student:
+            f2 = self.hint_layer2(x)
+        else:
+            f2 = x
+
         x = self.pool2(x)
         x = self.block3(x)
-        f3_pre = x
         x = F.relu(x)
-        f3 = x
-        if h == 64:
-            x = self.pool3(x)
+
         x = self.block4(x)
-        f4_pre = x
         x = F.relu(x)
-        f4 = x
+
         x = self.pool4(x)
         x = x.view(x.size(0), -1)
         f5 = x
         x = self.classifier(x)
 
-        if is_feat:
-            if preact:
-                return [f0, f1_pre, f2_pre, f3_pre, f4_pre, f5], x
-            else:
-                return [f0, f1, f2, f3, f4, f5], x
+        if extract_feat:
+            return x, [f0, f1, f2], f5
         else:
             return x
 

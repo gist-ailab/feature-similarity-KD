@@ -13,14 +13,16 @@ import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import backbone.resnet as resnet
-from dataset.svhn import SVHN
+from dataset.svhn import SVHN, SVHN_CROSS
 from tqdm import tqdm
 from backbone.vgg import vgg8
+from metric.distill_loss import cosine_loss, cross_sample_kd
+
 
 parser = argparse.ArgumentParser(description='Propert ResNets for CIFAR10 in pytorch')
 parser.add_argument('--resolution', default=8, type=int)
 parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/svhn', type=str)
-parser.add_argument('--teacher_path', default='aa', type=str)
+parser.add_argument('--teacher_path', default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/classification/checkpoint/teacher/teacher_epoch200_lr{0.1}/checkpoint.th', type=str)
 
 parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
@@ -30,7 +32,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('-b', '--batch-size', default=512, type=int,
                     metavar='N', help='mini-batch size (default: 128)')
-parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
@@ -63,8 +65,8 @@ def main():
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
-    teacher_model = torch.nn.DataParallel(resnet.__dict__[args.arch]())
-    student_model = torch.nn.DataParallel(vgg8(num_classes=10))
+    teacher_model = torch.nn.DataParallel(resnet.__dict__['resnet56']())
+    student_model = torch.nn.DataParallel(resnet.__dict__['resnet20']())
 
     teacher_model.cuda()
     student_model.cuda()
@@ -83,7 +85,7 @@ def main():
                                      std=[0.229, 0.224, 0.225])
 
     train_loader = torch.utils.data.DataLoader(
-        SVHN(
+        SVHN_CROSS(
                 root=args.data_dir, split='train',
                 pre_transform=transforms.Compose([
                           transforms.RandomHorizontalFlip(),
@@ -94,16 +96,14 @@ def main():
                           normalize,
                         ]), 
                 download=False,
-                resolution=args.resolution
+                resolution=args.resolution,
+                cross_dict_path=os.path.join(os.path.dirname(args.teacher_path), 'cross_dict.pkl')
             ),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
-    if args.resolution == 0:
-        eval_resolution = 0
-    else:
-        eval_resolution = 8
-
+    # Evaluation Set
+    eval_resolution = 8
     val_loader = torch.utils.data.DataLoader(
         SVHN(root=args.data_dir, split='test', 
             pre_transform=None,
@@ -119,32 +119,25 @@ def main():
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
-    if args.half:
-        model.half()
-        criterion.half()
-
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+    optimizer = torch.optim.SGD(student_model.parameters(), args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
+    
     # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60, 80], last_epoch=args.start_epoch - 1)
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100, 150], last_epoch=args.start_epoch - 1)
 
-    if args.arch in ['resnet1202', 'resnet110']:
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = args.lr*0.1
-
     if args.evaluate:
-        validate(val_loader, model, criterion)
+        validate(val_loader, student_model, criterion) 
         return
 
     for epoch in range(args.start_epoch, args.epochs):
         # train for one epoch
         print('current lr {:.5e}'.format(optimizer.param_groups[0]['lr']))
-        train(train_loader, model, criterion, optimizer, epoch)
+        train(train_loader, teacher_model, student_model, criterion, optimizer, epoch)
         lr_scheduler.step()
 
         # evaluate on validation set
-        prec1 = validate(val_loader, model, criterion)
+        prec1 = validate(val_loader, student_model, criterion)
 
         # remember best prec@1 and save checkpoint
         is_best = prec1 > best_prec1
@@ -153,17 +146,17 @@ def main():
         if epoch > 0 and epoch % args.save_every == 0:
             save_checkpoint({
                 'epoch': epoch + 1,
-                'state_dict': model.state_dict(),
+                'state_dict': student_model.state_dict(),
                 'best_prec1': best_prec1,
             }, is_best, filename=os.path.join(args.save_dir, 'checkpoint.th'))
 
         save_checkpoint({
-            'state_dict': model.state_dict(),
+            'state_dict': student_model.state_dict(),
             'best_prec1': best_prec1,
         }, is_best, filename=os.path.join(args.save_dir, 'model.th'))
 
 
-def train(train_loader, model, criterion, optimizer, epoch):
+def train(train_loader, teacher_model, student_model, criterion, optimizer, epoch):
     """
         Run one train epoch
     """
@@ -173,35 +166,54 @@ def train(train_loader, model, criterion, optimizer, epoch):
     top1 = AverageMeter()
 
     # switch to train mode
-    model.train()
+    teacher_model.eval()
+    student_model.train()
 
     end = time.time()
-    for i, (_, input, target) in enumerate(tqdm(train_loader)):
+    for i, data_ix in enumerate(tqdm(train_loader)):
+        HR_input, LR_input, HR_pos_input, LR_pos_input, correct_index, target = data_ix
+        correct_index = correct_index.bool()
 
-        # measure data loading time
+        # Load Input
         data_time.update(time.time() - end)
 
         target = target.cuda()
-        input_var = input.cuda()
+        HR_input, LR_input = HR_input.cuda(), LR_input.cuda()
+        HR_pos_input, LR_pos_input = HR_pos_input.cuda(), LR_pos_input.cuda()
         target_var = target
-        if args.half:
-            input_var = input_var.half()
 
-        # compute output
-        output = model(input_var)
-        loss = criterion(output, target_var)
+        # Comput Output
+        with torch.no_grad():
+            _, HR_feat_list, _ = teacher_model(HR_input, extract_feat=True)
+            _, HR_pos_feat_list, _ = teacher_model(HR_pos_input, extract_feat=True)
+
+        LR_output, LR_feat_list, _ = student_model(LR_input, extract_feat=True)
+        _, LR_pos_feat_list, _ = student_model(LR_pos_input, extract_feat=True)
+
+        # 1st-order KD loss
+        point_loss = 0.
+        for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
+            point_loss += cosine_loss(LR_feat, HR_feat) / len(HR_feat_list)
+
+        # 2nd-order KD loss
+        cross_loss = cross_sample_kd()(LR_feat_list[-1][correct_index], LR_pos_feat_list[-1][correct_index],
+                                        HR_feat_list[-1][correct_index], HR_pos_feat_list[-1][correct_index])       
+
+        loss_distill = point_loss * 2.0 + cross_loss * 0.4
+        loss_cri = criterion(LR_output, target_var)
+        loss = loss_distill + loss_cri
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        output = output.float()
+        LR_output = LR_output.float()
         loss = loss.float()
         # measure accuracy and record loss
-        prec1 = accuracy(output.data, target)[0]
-        losses.update(loss.item(), input.size(0))
-        top1.update(prec1.item(), input.size(0))
+        prec1 = accuracy(LR_output.data, target)[0]
+        losses.update(loss.item(), LR_input.size(0))
+        top1.update(prec1.item(), LR_input.size(0))
 
         # measure elapsed time
         batch_time.update(time.time() - end)

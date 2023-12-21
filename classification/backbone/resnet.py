@@ -34,6 +34,23 @@ import torch.nn.init as init
 
 from torch.autograd import Variable
 
+class HintLayer(nn.Module):
+    def __init__(self, inplane, planes, bn=False):
+        super(HintLayer, self).__init__()
+        self.hint = nn.Conv2d(inplane, planes, stride=1, kernel_size=1, padding=0, bias=False)
+
+        if bn:
+            self.bn = nn.BatchNorm2d(planes, eps=1e-05,)
+        else:
+            self.bn = None
+        
+    def forward(self, x):
+        out = self.hint(x)
+        if self.bn is not None:
+            out = self.bn(out)
+        return out
+    
+
 __all__ = ['ResNet', 'resnet20', 'resnet32', 'resnet44', 'resnet56', 'resnet110', 'resnet1202']
 
 def _weights_init(m):
@@ -84,7 +101,7 @@ class BasicBlock(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10):
+    def __init__(self, block, num_blocks, num_classes=10, student=False):
         super(ResNet, self).__init__()
         self.in_planes = 16
 
@@ -93,6 +110,15 @@ class ResNet(nn.Module):
         self.layer1 = self._make_layer(block, 16, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, 32, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 64, num_blocks[2], stride=2)
+
+        self.student = student
+        if self.student:
+            self.hint_layer1 = HintLayer(16, 16, bn=True)
+            self.hint_layer2 = HintLayer(32, 32, bn=True)
+            self.hint_layer3 = HintLayer(64, 64, bn=True)
+        else:
+            self.hint_layer0, self.hint_layer1, self.hint_layer2 = None, None, None
+
         self.linear = nn.Linear(64, num_classes)
         self.apply(_weights_init)
 
@@ -105,15 +131,35 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x, extract_feat=False):
         out = F.relu(self.bn1(self.conv1(x)))
         out = self.layer1(out)
+        if self.student:
+            feat1 = self.hint_layer1(out)
+        else:
+            feat1 = out
+
         out = self.layer2(out)
+        if self.student:
+            feat2 = self.hint_layer2(out)
+        else:
+            feat2 = out
+
         out = self.layer3(out)
+        if self.student:
+            feat3 = self.hint_layer3(out)
+        else:
+            feat3 = out
+
         out = F.avg_pool2d(out, out.size()[3])
         out = out.view(out.size(0), -1)
+        feat_pool = out
         out = self.linear(out)
-        return out
+        if extract_feat:
+            return out, [feat1, feat2, feat3], feat_pool
+        else:
+            return out
+
 
 
 def resnet20():

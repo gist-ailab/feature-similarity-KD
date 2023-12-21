@@ -136,7 +136,7 @@ def read_score(path):
         img_feats = pickle.load(fid)
     return img_feats
 
-def write_result(result_files, save_path, aligned, dataset_name, label):
+def write_result(result_files, save_path, dataset_name, label):
     methods = []
     scores = []
     for file in result_files:
@@ -148,7 +148,7 @@ def write_result(result_files, save_path, aligned, dataset_name, label):
     # colours = dict(
     #     zip(methods, sample_colours_from_colourmap(methods.shape[0], 'Set2')))
 
-    x_labels = [10**-6, 10**-5, 10**-4, 10**-3, 10**-2, 10**-1]
+    x_labels = [10**-4, 0.001, 0.01, 0.1, 0.3]
     tpr_fpr_table = PrettyTable(['Methods'] + [str(x) for x in x_labels])
     # fig = plt.figure()
     for method in methods:
