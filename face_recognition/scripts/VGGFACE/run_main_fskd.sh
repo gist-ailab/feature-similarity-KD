@@ -28,7 +28,7 @@ done
 ## Teacher Training
 for MARGIN in CosFace
 do
-    F_M=0.4
+    F_M=0.2
     SEED=5
     DATASET=vggface
     RESOLUTION=1

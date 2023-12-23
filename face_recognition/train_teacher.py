@@ -75,14 +75,19 @@ def train(args):
         net = get_mbf_large(fp16=False, num_features=args.feature_dim)
 
     # Head
+    if args.dataset == 'webface4m' or args.dataset == 'ms1mv2':
+        scale = 64.0
+    else:
+        scale = 32.0
+        
     if args.margin_type == 'ArcFace':
-        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
+        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
     elif args.margin_type == 'CosFace':
-        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
+        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
     elif args.margin_type == 'AdaFace':
-        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
+        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
     elif args.margin_type == 'MagFace':
-        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
+        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
     else:
         print(args.margin_type, 'is not available!')
 
@@ -103,6 +108,15 @@ def train(args):
         finish_iters = 47000
         exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[18000, 28000, 36000, 44000], gamma=0.1)
 
+    elif args.dataset == 'webface4m':
+        finish_iters = (1067 * 26)
+        if args.margin_type == 'AdaFace':
+            finish_iters = (1067 * 26)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[1067 * 12, 1067 * 20, 1067 * 24], gamma=0.1)
+        else:
+            finish_iters = (1067 * 24)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[1067 * 10, 1067 * 18, 1067 * 22], gamma=0.1)
+            
     elif args.dataset == 'mini_casia':
         finish_iters = 24000
         exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[9000, 14000, 18000, 22000], gamma=0.1)
@@ -399,6 +413,10 @@ if __name__ == '__main__':
     if args.dataset == 'casia':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train.list')
+
+    elif args.dataset == 'webface4m':
+        args.train_root = os.path.join(args.data_dir, 'webface4m_subset/image')
+        args.train_file_list = os.path.join(args.data_dir, 'webface4m_subset/train.list')
 
     elif args.dataset == 'mini_casia':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')

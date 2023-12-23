@@ -51,7 +51,7 @@ This is the following study of our previous study [Teaching Where to Look (ECCV 
         ```bash
             ## require install mxnet (pip install mxnet-cpu)
 
-            pip3 install mxnet-mkl==1.6.0 numpy==1.23.1
+            pip3 install mxnet-mkl numpy==1.20.3
 
             # 1. Evaluation Set (AgeDB-30)
             python utility/load_images_from_bin.py --data_type evaluation --data_dir $FACE_DIR
@@ -158,6 +158,10 @@ All networks were trained using a single A100 GPU (batchsize=256, 47K iterations
         ```
         apt-get -y install libglib2.0-0
         ```
+2. Charset error
+    ```
+    pip install -U --force-reinstall charset-normalizer  
+    ```
 
 # License
 The source code of this repository is released only for academic use. See the [license](LICENSE) file for details.

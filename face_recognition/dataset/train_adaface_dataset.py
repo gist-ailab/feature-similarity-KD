@@ -18,6 +18,20 @@ def img_loader(path, down_size, interpolation_option=None):
                 high_img = np.stack([high_img] * 3, 2)
             
             if down_size != 112:
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
                 # Down-Sampling
                 if interpolation_option == 'random':
                     interpolation = np.random.choice([cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_AREA, cv2.INTER_CUBIC, cv2.INTER_LANCZOS4], 1)[0]
