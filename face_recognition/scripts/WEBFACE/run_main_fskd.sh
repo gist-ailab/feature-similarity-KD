@@ -46,3 +46,39 @@ do
                                 --size_type $SIZE_TYPE --lr_prob $LR_PROB --photo_prob $PHOTO_PROB
     done
 done
+
+
+
+# Cross Sampling = True (DDP = True, MODE=IR)
+MARGIN=CosFace
+F_M=0.2
+for SIZE_TYPE in range fix
+do
+    for LR_PROB in 0.2 1.0
+    do
+        for CHOICE in 1 0
+        do 
+            if [ "$CHOICE" = "0" ]; then
+                PHOTO_PROB=0.0
+            elif [ "$CHOICE" = "1" ]; then
+                PHOTO_PROB=$LR_PROB
+            fi
+
+            SEED=5
+            BACKBONE=iresnet50
+            METHOD=F_SKD_CROSS_BN
+            PARAM=20.0,4.0
+            CMARGIN=0.0
+            RESOLUTION=1
+            POOLING=E
+            DATASET=webface4m
+            TEACHER=checkpoint/teacher-webface4m/iresnet50-$POOLING-IR-$MARGIN/seed{$SEED}/last_net.ckpt
+            CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nnodes=1 --nproc_per_node=4 --master_port=51 train_student_multi.py --seed $SEED --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
+                                                                            --backbone $BACKBONE --mode ir --margin_type $MARGIN --pooling $POOLING \
+                                                                            --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER \
+                                                                            --save_dir checkpoint/student-$DATASET/ablation_augparam/$BACKBONE-$MARGIN/F_M{$F_M}-size{$SIZE_TYPE}-photo{$PHOTO_PROB}-lr{$LR_PROB} \
+                                                                            --batch_size 512 --dataset $DATASET --cross_margin $CMARGIN --cross_sampling True --hint_bn True --margin_float $F_M \
+                                                                            --size_type $SIZE_TYPE --lr_prob $LR_PROB --photo_prob $PHOTO_PROB
+        done
+    done
+done

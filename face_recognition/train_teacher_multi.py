@@ -84,7 +84,7 @@ def train(args):
 
     # train dataset
     args.batch_size = int(args.batch_size / args.world_size)
-    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, equal=args.equal, photo_prob=args.photo_prob, lr_prob=args.lr_prob, size_type=args.size_type)
+    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, photo_prob=args.photo_prob, lr_prob=args.lr_prob, size_type=args.size_type)
 
     train_sampler = DistributedSampler(trainset)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=False, num_workers=8, drop_last=False, sampler=train_sampler)
@@ -287,7 +287,7 @@ def train(args):
             average_mini = 0.
             for down_size in eval_list:
                 valdataset =  FaceDataset(args.train_root, args.dataset, args.val_file_list, down_size, transform=transform, 
-                                    equal=args.equal, interpolation_option='fix', teacher_folder='', cross_sampling=False, margin=0.0)
+                                          teacher_folder='', cross_sampling=False, margin=0.0)
                 valloader = torch.utils.data.DataLoader(valdataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
 
                 correct, total = 0, 0
@@ -424,7 +424,6 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='ir')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
-    parser.add_argument('--equal', type=lambda x: x.lower()=='true', default=True)
     args = parser.parse_args()
 
 

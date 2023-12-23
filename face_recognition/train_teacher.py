@@ -63,7 +63,7 @@ def train(args):
     ])
 
     # validation dataset
-    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, equal=args.equal, photo_prob=args.photo_prob, lr_prob=args.lr_prob, size_type=args.size_type)
+    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, photo_prob=args.photo_prob, lr_prob=args.lr_prob, size_type=args.size_type)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8, drop_last=False)
     
     # define backbone and margin layer
@@ -277,7 +277,7 @@ def train(args):
         average_mini = 0.
         for down_size in eval_list:
             valdataset =  FaceDataset(args.train_root, args.dataset, args.val_file_list, down_size, transform=transform, 
-                                  equal=args.equal, interpolation_option='fix', teacher_folder='', cross_sampling=False, margin=0.0)
+                                      teacher_folder='', cross_sampling=False, margin=0.0)
             valloader = torch.utils.data.DataLoader(valdataset, batch_size=args.batch_size, shuffle=False, num_workers=8, drop_last=False)
 
             correct, total = 0, 0
@@ -407,7 +407,6 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='ir')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
-    parser.add_argument('--equal', type=lambda x: x.lower()=='true', default=True)
     parser.add_argument('--gpus', type=str, default='5', help='model prefix')
     args = parser.parse_args()
 
@@ -441,10 +440,6 @@ if __name__ == '__main__':
     args.agedb_file_list = os.path.join(args.data_dir, 'evaluation/agedb_30.txt')
     args.cfpfp_test_root = os.path.join(args.data_dir, 'evaluation/cfp_fp')
     args.cfpfp_file_list = os.path.join(args.data_dir, 'evaluation/cfp_fp.txt')
-    
-    
-    if args.down_size not in [0, 112]:
-        assert (args.interpolation == 'random') or (args.interpolation == 'fix')
     
     
     # Seed

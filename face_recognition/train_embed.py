@@ -8,11 +8,6 @@ os.chdir(base_folder)
 import torch.utils.data
 from backbone.iresnet import iresnet18, iresnet50
 from torch.nn import DataParallel
-from margin.ArcMarginProduct import ArcMarginProduct
-from margin.CosineMarginProduct import CosineMarginProduct
-from margin.AdaMarginProduct import AdaMarginProduct
-from margin.MagMarginProduct import MagMarginProduct, MagLoss
-from utility.log import init_log
 from dataset.train_dataset import FaceDataset
 
 from torch.optim import lr_scheduler
@@ -56,7 +51,7 @@ def selection(args):
     ])
 
     # validation dataset
-    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, 0, transform=transform, equal=args.equal, interpolation_option=args.interpolation)
+    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, 0, transform=transform, photo_prob=0.0, lr_prob=0.0, size_type='none')
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
 
     # define backbone and margin layer
@@ -112,36 +107,36 @@ def selection(args):
         
         result.append(out_dict)
     
-    with open(os.path.join(os.path.dirname(args.teacher_path), 'cross_dict.pkl'), 'wb') as f:
+    with open(os.path.join(os.path.dirname(args.teacher_path), 'cross_dict_%s.pkl' %args.dataset), 'wb') as f:
         pickle.dump(result, f)
 
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
-    parser.add_argument('--dataset', type=str, default='ms1mv2')
-    parser.add_argument('--data_dir', type=str, default='/data/sung/dataset/face_dset/')
+    parser.add_argument('--dataset', type=str, default='webface4m')
+    parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset/')
 
     parser.add_argument('--mode', type=str, default='ir', help='attention type', choices=['ir', 'cbam'])
     parser.add_argument('--backbone', type=str, default='iresnet50')
-    
-    parser.add_argument('--interpolation', type=str, default='random')
     parser.add_argument('--pooling', type=str, default='E')
     
-    parser.add_argument('--margin_type', type=str, default='CosFace', help='ArcFace, CosFace, SphereFace, MultiMargin, Softmax')
     parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
-    parser.add_argument('--equal', type=lambda x: x.lower()=='true', default=True)
-    parser.add_argument('--gpus', type=str, default='0', help='model prefix')
+    parser.add_argument('--gpus', type=str, default='7', help='model prefix')
     parser.add_argument('--seed', type=int, default=5)
 
-    parser.add_argument('--teacher_path', type=str, default='checkpoint/teacher-ms1mv2/iresnet50-E-IR-CosFace/seed{5}/last_net.ckpt')
+    parser.add_argument('--teacher_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/teacher-webface4m/iresnet50-E-IR-CosFace/seed{5}/last_net.ckpt')
     args = parser.parse_args()
+
 
     # PATH
     if args.dataset == 'casia':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train.list')
+    elif args.dataset == 'webface4m':
+        args.train_root = os.path.join(args.data_dir, 'webface4m_subset/image')
+        args.train_file_list = os.path.join(args.data_dir, 'webface4m_subset/train.list')
     elif args.dataset == 'ms1mv2':
         args.train_root = os.path.join(args.data_dir, 'faces_emore/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_emore/train.list')

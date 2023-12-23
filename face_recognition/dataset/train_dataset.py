@@ -36,13 +36,12 @@ def img_loader(augmenter, path, down_size):
         
 
 class FaceDataset(data.Dataset):
-    def __init__(self, root, data_type, file_list, down_size, transform=None, loader=img_loader, flip=True, equal=True, photo_prob=0.2, lr_prob=0.2, size_type='none', teacher_folder='', cross_sampling=False, margin=0.0):
+    def __init__(self, root, data_type, file_list, down_size, transform=None, loader=img_loader, flip=True, photo_prob=0.2, lr_prob=0.2, size_type='none', teacher_folder='', cross_sampling=False, margin=0.0):
         self.root = root
         self.data_type = data_type
         self.transform = transform
         self.loader = loader
         self.down_size = down_size
-        self.equal = equal
         
         self.augmenter = Augmenter(photometric_augmentation_prob=photo_prob, low_res_augmentation_prob=lr_prob, size_type=size_type)
 
@@ -64,7 +63,7 @@ class FaceDataset(data.Dataset):
             if self.margin < -2:
                 self.cross_dict = len(image_list)
             else:
-                with open(os.path.join(teacher_folder, 'cross_dict.pkl'), 'rb') as f:
+                with open(os.path.join(teacher_folder, 'cross_dict_%s.pkl' %self.data_type), 'rb') as f:
                     self.cross_dict = pickle.load(f)
         else:
             self.cross_dict = None

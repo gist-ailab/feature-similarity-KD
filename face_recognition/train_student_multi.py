@@ -95,7 +95,7 @@ def train(args):
     # train dataset
     args.batch_size = int(args.batch_size / args.world_size)
     trainset =  FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, 
-                            equal=args.equal, interpolation_option=args.interpolation,
+                            photo_prob=args.photo_prob, lr_prob=args.lr_prob, size_type=args.size_type,
                             teacher_folder=os.path.dirname(args.teacher_path), cross_sampling=args.cross_sampling, margin=args.cross_margin)
 
     train_sampler = DistributedSampler(trainset)
@@ -116,15 +116,22 @@ def train(args):
         net = get_mbf_large(fp16=False, num_features=args.feature_dim, student=hint_layer, hint_bn=args.hint_bn)
 
 
+    # Head
+    if args.dataset == 'webface4m' or args.dataset == 'ms1mv2':
+        scale = 64.0
+    else:
+        scale = 32.0
+        
+
     # Margin
     if args.margin_type == 'ArcFace':
-        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
+        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
     elif args.margin_type == 'CosFace':
-        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
+        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
     elif args.margin_type == 'AdaFace':
-        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
+        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
     elif args.margin_type == 'MagFace':
-        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float)
+        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
     else:
         print(args.margin_type, 'is not available!')
 
@@ -191,7 +198,16 @@ def train(args):
     elif args.dataset == 'mini_casia':
         finish_iters = 24000
         exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[9000, 14000, 18000, 22000], gamma=0.1)
-    
+
+    elif args.dataset == 'webface4m':
+        finish_iters = (1067 * 26)
+        if args.margin_type == 'AdaFace':
+            finish_iters = (1067 * 26)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[1067 * 12, 1067 * 20, 1067 * 24], gamma=0.1)
+        else:
+            finish_iters = (1067 * 24)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[1067 * 10, 1067 * 18, 1067 * 22], gamma=0.1)
+
     elif args.dataset == 'vggface':
         if args.margin_type == 'AdaFace':
             finish_iters = (6128 * 26)
@@ -536,15 +552,16 @@ if __name__ == '__main__':
     parser.add_argument('--save_dir', type=str, default='checkpoint/imp/', help='model save dir')
     parser.add_argument('--mode', type=str, default='ir', help='attention type', choices=['ir', 'cbam'])
     parser.add_argument('--backbone', type=str, default='iresnet50')
-    
-    parser.add_argument('--interpolation', type=str, default='random')
     parser.add_argument('--pooling', type=str, default='E')
+    
+    parser.add_argument('--size_type', type=str, choices=['range', 'fix']) #
+    parser.add_argument('--photo_prob', type=float)
+    parser.add_argument('--lr_prob', type=float)
     
     parser.add_argument('--margin_type', type=str, default='CosFace', help='ArcFace, CosFace, SphereFace, MultiMargin, Softmax')
     parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
-    parser.add_argument('--equal', type=lambda x: x.lower()=='true', default=True)
     parser.add_argument('--seed', type=int, default=1)
     
     parser.add_argument('--global_rank', type=int, default=0)
@@ -567,6 +584,11 @@ if __name__ == '__main__':
     if args.dataset == 'casia':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train.list')
+        
+    elif args.dataset == 'webface4m':
+        args.train_root = os.path.join(args.data_dir, 'webface4m_subset/image')
+        args.train_file_list = os.path.join(args.data_dir, 'webface4m_subset/train.list')
+
     elif args.dataset == 'mini_casia':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train_mini.list')
@@ -587,9 +609,6 @@ if __name__ == '__main__':
     args.agedb_file_list = os.path.join(args.data_dir, 'evaluation/agedb_30.txt')
     args.cfpfp_test_root = os.path.join(args.data_dir, 'evaluation/cfp_fp')
     args.cfpfp_file_list = os.path.join(args.data_dir, 'evaluation/cfp_fp.txt')
-
-    if args.down_size not in [0, 112]:
-        assert (args.interpolation == 'random') or (args.interpolation == 'fix')
 
     # Seed
     set_random_seed(args.seed) 
