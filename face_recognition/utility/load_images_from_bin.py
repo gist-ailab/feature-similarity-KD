@@ -124,10 +124,10 @@ if __name__=='__main__':
 
     elif data_type == 'train':
         rec_path = os.path.join(data_dir, args.data_name)
-        # if 'webface4m' in args.data_name:
-        #     load_mx_rec_webface4m(rec_path)
-        # else:
-        #     load_mx_rec(rec_path)
+        if 'webface4m' in args.data_name:
+            load_mx_rec_webface4m(rec_path)
+        else:
+            load_mx_rec(rec_path)
         
         dataset = os.path.join(data_dir, args.data_name, 'image')
         list = os.path.join(data_dir, args.data_name, 'train.list')
