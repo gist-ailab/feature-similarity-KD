@@ -93,6 +93,7 @@ def train(args):
 
 
     # train dataset
+    args.batch_total_size = args.batch_size
     args.batch_size = int(args.batch_size / args.world_size)
     trainset =  FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, 
                             photo_prob=args.photo_prob, lr_prob=args.lr_prob, size_type=args.size_type,
@@ -200,13 +201,15 @@ def train(args):
         exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[9000, 14000, 18000, 22000], gamma=0.1)
 
     elif args.dataset == 'webface4m':
-        finish_iters = (1067 * 26)
+        ratio = 512 / args.batch_total_size
+        iter_size = int(1067 * ratio)
+        print('iter_size: ', iter_size)
         if args.margin_type == 'AdaFace':
-            finish_iters = (1067 * 26)
-            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[1067 * 12, 1067 * 20, 1067 * 24], gamma=0.1)
+            finish_iters = (iter_size * 26)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[iter_size * 12, iter_size * 20, iter_size * 24], gamma=0.1)
         else:
-            finish_iters = (1067 * 24)
-            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[1067 * 10, 1067 * 18, 1067 * 22], gamma=0.1)
+            finish_iters = (iter_size * 24)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[iter_size * 10, iter_size * 18, iter_size * 22], gamma=0.1)
 
     elif args.dataset == 'vggface':
         if args.margin_type == 'AdaFace':
