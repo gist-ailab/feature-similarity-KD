@@ -84,7 +84,7 @@ def train(args):
 
     # train dataset
     args.batch_size = int(args.batch_size / args.world_size)
-    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, equal=args.equal, interpolation_option=args.interpolation)
+    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, equal=args.equal, photo_prob=args.photo_prob, lr_prob=args.lr_prob, size_type=args.size_type)
 
     train_sampler = DistributedSampler(trainset)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=False, num_workers=8, drop_last=False, sampler=train_sampler)
@@ -404,8 +404,11 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset')
     parser.add_argument('--save_dir', type=str, default='imp/', help='model save dir')
     parser.add_argument('--down_size', type=int, default=1) # 1 : all type, 0 : high, others : low
-    parser.add_argument('--interpolation', type=str, default='random') # 
     parser.add_argument('--pooling', type=str, default='E') #
+
+    parser.add_argument('--size_type', type=str, choices=['range', 'fix']) #
+    parser.add_argument('--photo_prob', type=float)
+    parser.add_argument('--lr_prob', type=float)
 
     parser.add_argument('--margin_float', type=float)
 
@@ -454,10 +457,6 @@ if __name__ == '__main__':
     args.agedb_file_list = os.path.join(args.data_dir, 'evaluation/agedb_30.txt')
     args.cfpfp_test_root = os.path.join(args.data_dir, 'evaluation/cfp_fp')
     args.cfpfp_file_list = os.path.join(args.data_dir, 'evaluation/cfp_fp.txt')
-    
-    
-    if args.down_size not in [0, 112]:
-        assert (args.interpolation == 'random') or (args.interpolation == 'fix')
     
     
     # Seed

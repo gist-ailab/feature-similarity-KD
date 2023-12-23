@@ -63,7 +63,7 @@ def train(args):
     ])
 
     # validation dataset
-    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, equal=args.equal, interpolation_option=args.interpolation)
+    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, equal=args.equal, photo_prob=args.photo_prob, lr_prob=args.lr_prob, size_type=args.size_type)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8, drop_last=False)
     
     # define backbone and margin layer
@@ -392,8 +392,11 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset')
     parser.add_argument('--save_dir', type=str, default='imp/', help='model save dir')
     parser.add_argument('--down_size', type=int, default=1) # 1 : all type, 0 : high, others : low
-    parser.add_argument('--interpolation', type=str, default='random') # 
     parser.add_argument('--pooling', type=str, default='E') #
+
+    parser.add_argument('--size_type', type=str, choices=['range', 'fix']) #
+    parser.add_argument('--photo_prob', type=float)
+    parser.add_argument('--lr_prob', type=float)
 
     parser.add_argument('--margin_float', type=float)
 

@@ -37,6 +37,7 @@ class Augmenter():
             small_side = int(side_ratio * img_shape[0])
         elif self.size_type == 'fix':
             small_side = random.sample([14, 28, 56, 112], k=1)[0]
+            side_ratio = small_side / 112
         else:
             raise('Error!')
 
