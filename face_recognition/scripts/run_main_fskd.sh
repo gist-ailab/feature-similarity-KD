@@ -53,22 +53,60 @@ for MARGIN in CosFace ArcFace AdaFace
 do
     for SEED in 5
     do
-        BACKBONE=iresnet50
-        METHOD=F_SKD_CROSS_BN
-        PARAM=20.0,4.0
-        CMARGIN=0.0
-        RESOLUTION=1
-        INTERPOLATION=random
-        POOLING=E
-        DATASET=casia
-        TEACHER=checkpoint/teacher-casia/iresnet50-$POOLING-IR-$MARGIN/seed{$SEED}/last_net.ckpt
-        CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.launch --nnodes=1 --nproc_per_node=2 --master_port=991 train_student_multi.py --seed $SEED --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
-                                                                    --backbone $BACKBONE --mode ir --interpolation $INTERPOLATION --margin_type $MARGIN --pooling $POOLING \
-                                                                    --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER \
-                                                                    --save_dir checkpoint/student-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/$METHOD-P{$PARAM}-M{$CMARGIN}/seed{$SEED} \
-                                                                    --batch_size 256 --dataset $DATASET --cross_margin $CMARGIN --cross_sampling True --hint_bn True --margin_float 0.2
+        for F_M in 0.2 0.3
+        do
+            BACKBONE=iresnet50
+            METHOD=F_SKD_CROSS_BN
+            PARAM=20.0,4.0
+            CMARGIN=0.0
+            RESOLUTION=1
+            INTERPOLATION=random
+            POOLING=E
+            DATASET=casia
+            TEACHER=checkpoint/teacher-casia/iresnet50-$POOLING-IR-$MARGIN/seed{$SEED}/last_net.ckpt
+            CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nnodes=1 --nproc_per_node=2 --master_port=991 train_student_multi.py --seed $SEED --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
+                                                                        --backbone $BACKBONE --mode ir --interpolation $INTERPOLATION --margin_type $MARGIN --pooling $POOLING \
+                                                                        --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER \
+                                                                        --save_dir checkpoint/student-test/student-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/$METHOD-P{$PARAM}-M{$CMARGIN}-FM{$F_M}/seed{$SEED} \
+                                                                        --batch_size 256 --dataset $DATASET --cross_margin $CMARGIN --cross_sampling True --hint_bn True --margin_float $F_M
+        done
     done
 done
+
+# Cross Sampling = True (DDP = True, MODE=IR)
+for MARGIN in CosFace ArcFace AdaFace
+do
+    for SEED in 5
+    do
+        for F_M in 0.35 0.4
+        do
+            BACKBONE=iresnet50
+            METHOD=F_SKD_CROSS_BN
+            PARAM=20.0,4.0
+            CMARGIN=0.0
+            RESOLUTION=1
+            INTERPOLATION=random
+            POOLING=E
+            DATASET=casia
+            TEACHER=checkpoint/teacher-casia/iresnet50-$POOLING-IR-$MARGIN/seed{$SEED}/last_net.ckpt
+            CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.launch --nnodes=1 --nproc_per_node=2 --master_port=921 train_student_multi.py --seed $SEED --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
+                                                                        --backbone $BACKBONE --mode ir --interpolation $INTERPOLATION --margin_type $MARGIN --pooling $POOLING \
+                                                                        --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER \
+                                                                        --save_dir checkpoint/student-test/student-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/$METHOD-P{$PARAM}-M{$CMARGIN}-FM{$F_M}/seed{$SEED} \
+                                                                        --batch_size 256 --dataset $DATASET --cross_margin $CMARGIN --cross_sampling True --hint_bn True --margin_float $F_M
+        done
+    done
+done
+
+
+
+
+
+
+
+
+
+
 
 
 # Cross Sampling = True (DDP = True, MODE=CBAM)

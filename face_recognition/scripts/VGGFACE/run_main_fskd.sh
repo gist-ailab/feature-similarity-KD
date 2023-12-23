@@ -35,7 +35,7 @@ do
     POOLING=E
     BACKBONE=iresnet50
     INTERPOLATION=random
-    python train_teacher.py --seed $SEED --gpus 3 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/naive-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN/resol$RESOLUTION-$INTERPOLATION/seed{$SEED} \
+    python train_teacher.py --seed $SEED --gpus 3 --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/test/naive-$DATASET/$BACKBONE-$POOLING-IR-$MARGIN-FM{$F_M}/resol$RESOLUTION-$INTERPOLATION/seed{$SEED} \
                             --backbone $BACKBONE --down_size $RESOLUTION --pooling $POOLING --interpolation $INTERPOLATION --mode ir --margin_type $MARGIN --dataset $DATASET --batch_size 512 --margin_float $F_M
     
 done

@@ -21,6 +21,7 @@ from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 from scipy.io import loadmat
 from sklearn.metrics import roc_curve, auc
+import pickle
 
 
 class DATASET(Dataset):
@@ -145,6 +146,9 @@ def verification(features, path_list, pos_pair, neg_pair, save_dir, prefix, do_n
             list(zip(abs(fpr - x_labels[fpr_iter]), range(len(fpr)))))
         tpr_fpr_row.append('%.2f' % (tpr[min_index] * 100))
     
+    with open(os.path.join(args.save_dir, args.prefix + '.pkl'), 'wb') as f:
+        pickle.dump(tpr_fpr_row, f)
+        
     print(tpr_fpr_row)
 
 
@@ -173,12 +177,12 @@ def load_model(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='do ijb test')
     parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/QMUL-SurvFace/Face_Verification_Test_Set/')
-    parser.add_argument('--gpus', default='0', type=str)
-    parser.add_argument('--batch_size', default=512, type=int, help='')
+    parser.add_argument('--gpus', default='7', type=str)
+    parser.add_argument('--batch_size', default=256, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
     parser.add_argument('--backbone', type=str, default='iresnet50')
     parser.add_argument('--pooling', type=str, default='E') #
-    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/student-casia/iresnet50-E-IR-ArcFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}', help='scale size')
+    parser.add_argument('--checkpoint_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/test/old_result_(m=default)/student-casia/iresnet50-E-IR-CosFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}', help='scale size')
     parser.add_argument('--save_dir', type=str, default='result/', help='scale size')
     parser.add_argument('--prefix', type=str, default='aa', help='scale size')
 
