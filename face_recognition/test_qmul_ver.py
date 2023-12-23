@@ -110,6 +110,7 @@ def infer_images(model, image_list, batch_size, use_flip_test, qualnet=False):
     assert len(features) == len(image_list)
     return img_feats, pathes
 
+
 def verification(features, path_list, pos_pair, neg_pair, save_dir, prefix, do_norm=True):
     if do_norm: 
         features = features / np.linalg.norm(features, ord=2, axis=1).reshape(-1,1)
