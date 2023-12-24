@@ -108,11 +108,11 @@ do
             POOLING=E
             DATASET=webface4m
             TEACHER=checkpoint/teacher-webface4m/iresnet50-$POOLING-IR-$MARGIN/seed{$SEED}/last_net.ckpt
-            CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nnodes=1 --nproc_per_node=4 --master_port=51 train_student_multi.py --seed $SEED --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
+            CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 python -m torch.distributed.launch --nnodes=1 --nproc_per_node=6 --master_port=51 train_student_multi.py --seed $SEED --data_dir /SSDb/sung/dataset/face_dset/ --down_size $RESOLUTION \
                                                                             --backbone $BACKBONE --mode ir --margin_type $MARGIN --pooling $POOLING \
                                                                             --distill_type $METHOD --distill_param $PARAM --teacher_path $TEACHER \
                                                                             --save_dir checkpoint/student-$DATASET/ablation_augparam/$BACKBONE-$MARGIN/F_M{$F_M}-size{$SIZE_TYPE}-photo{$PHOTO_PROB}-lr{$LR_PROB} \
-                                                                            --batch_size 256 --dataset $DATASET --cross_margin $CMARGIN --cross_sampling True --hint_bn True --margin_float $F_M \
+                                                                            --batch_size 510 --dataset $DATASET --cross_margin $CMARGIN --cross_sampling True --hint_bn True --margin_float $F_M \
                                                                             --size_type $SIZE_TYPE --lr_prob $LR_PROB --photo_prob $PHOTO_PROB
         done
     done
