@@ -7,7 +7,7 @@
 
 ################################## ## HR_only Training ## #######################
 # 1. WEBFACE4M
-for MARGIN in AdaFace
+for MARGIN in AdaFace CosFace ArcFace
 do
     SEED=5
 
