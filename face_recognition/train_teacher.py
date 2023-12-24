@@ -415,7 +415,7 @@ if __name__ == '__main__':
     parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
     parser.add_argument('--mode', type=str, default='ir')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
-    parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
+    parser.add_argument('--save_freq', type=int, default=10000000, help='save frequency')
     parser.add_argument('--gpus', type=str, default='5', help='model prefix')
     args = parser.parse_args()
 

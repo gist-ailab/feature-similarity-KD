@@ -433,7 +433,7 @@ if __name__ == '__main__':
     parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
     parser.add_argument('--mode', type=str, default='ir')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
-    parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
+    parser.add_argument('--save_freq', type=int, default=100000000, help='save frequency')
     args = parser.parse_args()
 
 

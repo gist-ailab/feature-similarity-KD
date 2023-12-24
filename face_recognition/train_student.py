@@ -567,7 +567,7 @@ if __name__ == '__main__':
     parser.add_argument('--margin_type', type=str, default='CosFace', help='ArcFace, CosFace, SphereFace, MultiMargin, Softmax')
     parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
-    parser.add_argument('--save_freq', type=int, default=10000, help='save frequency')
+    parser.add_argument('--save_freq', type=int, default=1000000000, help='save frequency')
     parser.add_argument('--gpus', type=str, default='0', help='model prefix')
     parser.add_argument('--seed', type=int, default=1)
     
