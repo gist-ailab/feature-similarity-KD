@@ -105,16 +105,26 @@ def train(args):
 
 
     if args.dataset == 'casia':
-        finish_iters = 47000
-        exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[18000, 28000, 36000, 44000], gamma=0.1)
+        ratio = 512 / args.batch_size
+        iter_size = int(959 * ratio)
+        print('iter_size: ', iter_size)
+        if args.margin_type == 'AdaFace':
+            finish_iters = (iter_size * 26)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[iter_size * 12, iter_size * 20, iter_size * 24], gamma=0.1)
+        else:
+            finish_iters = (iter_size * 24)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[iter_size * 10, iter_size * 18, iter_size * 22], gamma=0.1)
 
     elif args.dataset == 'webface4m':
+        ratio = 1024 / args.batch_size
+        iter_size = int(4136 * ratio)
+        print('iter_size: ', iter_size)
         if args.margin_type == 'AdaFace':
-            finish_iters = (4136 * 26)
-            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[4136 * 12, 4136 * 20, 4136 * 24], gamma=0.1)
+            finish_iters = (iter_size * 26)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[iter_size * 12, iter_size * 20, iter_size * 24], gamma=0.1)
         else:
-            finish_iters = (4136 * 24)
-            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[4136 * 10, 4136 * 18, 4136 * 22], gamma=0.1)
+            finish_iters = (iter_size * 24)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[iter_size * 10, iter_size * 18, iter_size * 22], gamma=0.1)
             
     elif args.dataset == 'mini_casia':
         finish_iters = 24000
