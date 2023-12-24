@@ -115,8 +115,8 @@ class FaceDataset(data.Dataset):
             ind = img_path.find('faces_vgg_112x112')
             img_path = img_path[ind+24:]
         elif 'webface4m' in self.data_type:
-            ind = img_path.find('webface4m_subset')
-            img_path = img_path[ind+23:]
+            ind = img_path.find('webface4m')
+            img_path = img_path[ind+16:]
         else:
             raise('Error!')
 

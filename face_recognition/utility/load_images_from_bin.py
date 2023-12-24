@@ -2,14 +2,12 @@
 # encoding: utf-8
 from PIL import Image
 import pickle
-import mxnet as mx
 import os
 from tqdm import tqdm
 import argparse
 from torch.utils.data import DataLoader
 import argparse
 from tqdm import tqdm
-from mxdataset import MXDataset
 import numpy as np
 import cv2
 '''
@@ -98,7 +96,7 @@ def generate_dataset_list(dataset_path,dataset_list):
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
     parser.add_argument('--data_dir', type=str, default='/SSDb/sung/dataset/face_dset')
-    parser.add_argument('--data_name', type=str, default='webface4m_subset')
+    parser.add_argument('--data_name', type=str, default='webface4m')
     parser.add_argument('--data_type', type=str, default='train', help='train or evaluation')
     args = parser.parse_args()
     
@@ -106,6 +104,7 @@ if __name__=='__main__':
     data_dir = args.data_dir
     
     if data_type == 'evaluation':
+        import mxnet as mx
         bin_path = os.path.join(data_dir, args.data_name, 'agedb_30.bin')
         save_dir = os.path.join(data_dir, 'evaluation', 'agedb_30')
         name = 'agedb_30'
@@ -124,9 +123,9 @@ if __name__=='__main__':
 
     elif data_type == 'train':
         rec_path = os.path.join(data_dir, args.data_name)
-        if 'webface4m' in args.data_name:
-            load_mx_rec_webface4m(rec_path)
-        else:
+        if 'webface4m' not in args.data_name:
+            import mxnet as mx
+            from mxdataset import MXDataset
             load_mx_rec(rec_path)
         
         dataset = os.path.join(data_dir, args.data_name, 'image')

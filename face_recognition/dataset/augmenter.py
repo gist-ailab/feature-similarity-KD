@@ -33,7 +33,7 @@ class Augmenter():
         img_shape = img.shape
 
         if self.size_type == 'range':
-            side_ratio = np.random.uniform(0.2, 1.0)
+            side_ratio = np.random.uniform(0.125, 1.0)
             small_side = int(side_ratio * img_shape[0])
         elif self.size_type == 'fix':
             small_side = random.sample([14, 28, 56, 112], k=1)[0]

@@ -135,8 +135,8 @@ if __name__ == '__main__':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train.list')
     elif args.dataset == 'webface4m':
-        args.train_root = os.path.join(args.data_dir, 'webface4m_subset/image')
-        args.train_file_list = os.path.join(args.data_dir, 'webface4m_subset/train.list')
+        args.train_root = os.path.join(args.data_dir, 'webface4m/image')
+        args.train_file_list = os.path.join(args.data_dir, 'webface4m/train.list')
     elif args.dataset == 'ms1mv2':
         args.train_root = os.path.join(args.data_dir, 'faces_emore/image')
         args.train_file_list = os.path.join(args.data_dir, 'faces_emore/train.list')

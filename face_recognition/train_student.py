@@ -177,13 +177,12 @@ def train(args):
         exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[9000, 14000, 18000, 22000], gamma=0.1)
 
     elif args.dataset == 'webface4m':
-        finish_iters = (1067 * 26)
         if args.margin_type == 'AdaFace':
-            finish_iters = (1067 * 26)
-            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[1067 * 12, 1067 * 20, 1067 * 24], gamma=0.1)
+            finish_iters = (4136 * 26)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[4136 * 12, 4136 * 20, 4136 * 24], gamma=0.1)
         else:
-            finish_iters = (1067 * 24)
-            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[1067 * 10, 1067 * 18, 1067 * 22], gamma=0.1)
+            finish_iters = (4136 * 24)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[4136 * 10, 4136 * 18, 4136 * 22], gamma=0.1)
 
     elif args.dataset == 'vggface':
         if args.margin_type == 'AdaFace':
@@ -578,8 +577,8 @@ if __name__ == '__main__':
         args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train.list')
     
     elif args.dataset == 'webface4m':
-        args.train_root = os.path.join(args.data_dir, 'webface4m_subset/image')
-        args.train_file_list = os.path.join(args.data_dir, 'webface4m_subset/train.list')
+        args.train_root = os.path.join(args.data_dir, 'webface4m/image')
+        args.train_file_list = os.path.join(args.data_dir, 'webface4m/train.list')
 
     elif args.dataset == 'mini_casia':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')

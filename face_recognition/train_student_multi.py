@@ -201,8 +201,8 @@ def train(args):
         exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[9000, 14000, 18000, 22000], gamma=0.1)
 
     elif args.dataset == 'webface4m':
-        ratio = 512 / args.batch_total_size
-        iter_size = int(1067 * ratio)
+        ratio = 1024 / args.batch_total_size
+        iter_size = int(4136 * ratio)
         print('iter_size: ', iter_size)
         if args.margin_type == 'AdaFace':
             finish_iters = (iter_size * 26)
@@ -589,8 +589,8 @@ if __name__ == '__main__':
         args.train_file_list = os.path.join(args.data_dir, 'faces_webface_112x112/train.list')
         
     elif args.dataset == 'webface4m':
-        args.train_root = os.path.join(args.data_dir, 'webface4m_subset/image')
-        args.train_file_list = os.path.join(args.data_dir, 'webface4m_subset/train.list')
+        args.train_root = os.path.join(args.data_dir, 'webface4m/image')
+        args.train_file_list = os.path.join(args.data_dir, 'webface4m/train.list')
 
     elif args.dataset == 'mini_casia':
         args.train_root = os.path.join(args.data_dir, 'faces_webface_112x112/image')
