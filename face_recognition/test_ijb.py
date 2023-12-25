@@ -143,7 +143,6 @@ def identification(data_root, dataset_name, img_input_feats, save_dir, aligned):
         pd.DataFrame(identification_result, index=['identification']).to_csv(os.path.join(save_dir, "identification_not_result.csv"))
 
     
-
 def verification(data_root, dataset_name, img_input_feats, save_dir, prefix, aligned):
     templates, medias = eval_helper_verification.read_template_media_list(
         os.path.join(data_root, '%s/meta' % dataset_name, '%s_face_tid_mid.txt' % dataset_name.lower()))

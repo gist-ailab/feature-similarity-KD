@@ -43,7 +43,8 @@ class SCFACE_DATASET(Dataset):
         image_path = self.img_list[idx]
 
         img = cv2.imread(image_path)
-        img = cv2.resize(img, dsize=(112, 112))
+        img = img[:, :, :3]
+        img = cv2.resize(img, dsize=(112, 112), interpolation=cv2.INTER_LINEAR)
 
         if self.image_is_saved_with_swapped_B_and_R:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -60,13 +61,6 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
-
-def l2_norm(input, axis=1):
-    """l2 normalize
-    """
-    norm = torch.norm(input, 2, axis, True)
-    output = torch.div(input, norm)
-    return output, norm
 
 
 def infer_images(model, image_list, landmark_list_path, batch_size, use_flip_test, qualnet=False):
@@ -96,9 +90,7 @@ def infer_images(model, image_list, landmark_list_path, batch_size, use_flip_tes
                 features.append(feature.cpu().numpy())
 
     features = np.concatenate(features, axis=0)
-    img_feats = np.array(features).astype(np.float32)
-    assert len(features) == len(image_list)
-    return img_feats
+    return features
 
 
 def load_model(args):
@@ -150,7 +142,7 @@ def calc_accuracy(probe_feats, p_l, gallery_feats, g_l, dist, save_dir, do_norm=
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='do ijb test')
     parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/scface_chen/SCFace_MTCNN/test_80')
-    parser.add_argument('--gpus', default='3', type=str)
+    parser.add_argument('--gpus', default='7', type=str)
     parser.add_argument('--batch_size', default=512, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
     parser.add_argument('--backbone', type=str, default='iresnet50')

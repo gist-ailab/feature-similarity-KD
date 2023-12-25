@@ -158,7 +158,7 @@ def identification(gallery_feature_list, mated_probe_feature_list, unmated_probe
     if do_norm: 
         template_feat_list = template_feat_list / np.linalg.norm(template_feat_list, ord=2, axis=1).reshape(-1,1)
     template_id_list = np.array(template_id_list)
-    
+
 
     # Construct ID list
     probe_id_list = []
@@ -183,16 +183,17 @@ def evaluation(query_ids, probe_feats, gallery_feats, gallery_ids):
     scores1 = np.empty(len(negative_index))
     for n in range(len(negative_index)):
         score = np.sort(similarity[negative_index[n], :])[::-1]
-        scores1[n] = score[0]  # only consider the highest score
+        scores1[n] = score[0]  # only consider the highest score for unmated probe
 
     # Searching step
     step = (np.max(scores1) - np.min(scores1)) / 1000
     thresholds = []
     FPIRs = []
     for threshold in np.arange(np.min(scores1), np.max(scores1), step):
-        current_fpir = np.sum(scores1 > threshold) / len(scores1)
+        current_fpir = np.sum(scores1 >= threshold) / len(scores1)
         thresholds.append(threshold)
         FPIRs.append(current_fpir)
+
 
     # Compute FNIR corresponding to FPIR
     positive_index = np.where(query_ids != -100)[0]
@@ -204,10 +205,9 @@ def evaluation(query_ids, probe_feats, gallery_feats, gallery_ids):
         top_indices = np.argsort(similarity_ix)[::-1][:L]
         
         if query_id in gallery_ids[top_indices]:
-            gt_scores[p] = np.max(similarity_ix[top_indices])
+            gt_scores[p] = similarity_ix[top_indices][np.where(gallery_ids[top_indices] == query_id)[0]]
         else:
             gt_scores[p] = -100000
-
 
     FNIRs = []
     for threshold in thresholds:
@@ -245,9 +245,6 @@ def evaluation(query_ids, probe_feats, gallery_feats, gallery_ids):
     return None
 
 
-
-
-
 def load_model(args):
     device = torch.device('cuda')
 
@@ -263,7 +260,7 @@ def load_model(args):
     for key, value in net_ckpt.items():
         if ('conv_bridge' not in key) and ('hint' not in key):
             new_ckpt[key] = value
-    net.load_state_dict(new_ckpt, strict=False)
+    net.load_state_dict(new_ckpt, strict=True)
 
     net = net.to(device)
     net.eval()
@@ -271,9 +268,9 @@ def load_model(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='do ijb test')
+    parser = argparse.ArgumentParser(description='do qmul test')
     parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/QMUL-SurvFace/Face_Identification_Test_Set/')
-    parser.add_argument('--gpus', default='3', type=str)
+    parser.add_argument('--gpus', default='7', type=str)
     parser.add_argument('--batch_size', default=256, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
     parser.add_argument('--backbone', type=str, default='iresnet50')
