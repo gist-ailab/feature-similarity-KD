@@ -150,12 +150,12 @@ def calc_accuracy(probe_feats, p_l, gallery_feats, g_l, dist, save_dir, do_norm=
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='do ijb test')
     parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/scface_chen/SCFace_MTCNN/test_80')
-    parser.add_argument('--gpus', default='0', type=str)
+    parser.add_argument('--gpus', default='3', type=str)
     parser.add_argument('--batch_size', default=512, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
     parser.add_argument('--backbone', type=str, default='iresnet50')
     parser.add_argument('--pooling', type=str, default='E') #
-    parser.add_argument('--checkpoint_path', type=str, default='checkpoint/test/old_result_(m=default)/student-casia/iresnet50-E-IR-CosFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}/last_net.ckpt', help='scale size')
+    parser.add_argument('--checkpoint_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/case1/HR-LR-PHOTO{0.2},LR{0.2},type{range}/iresnet50-AdaFace-0.4/last_net.ckpt', help='scale size')
     parser.add_argument('--save_dir', type=str, default='imp/', help='scale size')
     parser.add_argument('--use_flip_test', type=str2bool, default='True')
     parser.add_argument('--qualnet', type=str2bool, default='False')
@@ -179,18 +179,17 @@ if __name__ == '__main__':
 
 
     # Evaluation for 3 Distances
-    distance = 1
-    probe_list = glob(os.path.join(args.data_dir, 'probe_d%d/*/*.jpg') %distance)
-    probe_labels = np.array([int(os.path.basename(probe_path).split('_')[0]) for probe_path in probe_list])
+    for distance in [1,2,3]:
+        probe_list = glob(os.path.join(args.data_dir, 'probe_d%d/*/*.jpg') %distance)
+        probe_labels = np.array([int(os.path.basename(probe_path).split('_')[0]) for probe_path in probe_list])
 
-    # run protocol
-    probe_feats = infer_images(model=model,
-                                image_list=probe_list,
-                                landmark_list_path=None,
-                                batch_size=args.batch_size,
-                                use_flip_test=args.use_flip_test,
-                                qualnet=args.qualnet)
+        # run protocol
+        probe_feats = infer_images(model=model,
+                                    image_list=probe_list,
+                                    landmark_list_path=None,
+                                    batch_size=args.batch_size,
+                                    use_flip_test=args.use_flip_test,
+                                    qualnet=args.qualnet)
 
-    # Identification
-    calc_accuracy(probe_feats, probe_labels, gallery_feats, gallery_labels, distance, args.save_dir, do_norm=True)
-        
+        # Identification
+        calc_accuracy(probe_feats, probe_labels, gallery_feats, gallery_labels, distance, args.save_dir, do_norm=True)

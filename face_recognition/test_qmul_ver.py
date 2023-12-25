@@ -178,12 +178,12 @@ def load_model(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='do ijb test')
     parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/QMUL-SurvFace/Face_Verification_Test_Set/')
-    parser.add_argument('--gpus', default='7', type=str)
+    parser.add_argument('--gpus', default='3', type=str)
     parser.add_argument('--batch_size', default=256, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
     parser.add_argument('--backbone', type=str, default='iresnet50')
     parser.add_argument('--pooling', type=str, default='E') #
-    parser.add_argument('--checkpoint_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/test/old_result_(m=default)/student-casia/iresnet50-E-IR-CosFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}', help='scale size')
+    parser.add_argument('--checkpoint_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/case1/HR-LR-PHOTO{0.2},LR{0.2},type{range}/iresnet50-AdaFace-0.4', help='scale size')
     parser.add_argument('--save_dir', type=str, default='result/', help='scale size')
     parser.add_argument('--prefix', type=str, default='aa', help='scale size')
 

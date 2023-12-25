@@ -97,10 +97,7 @@ def train(args):
         net = iresnet18(attention_type=args.mode, pooling=args.pooling)    
 
     # Head
-    if args.dataset == 'webface4m' or args.dataset == 'ms1mv2':
-        scale = 64.0
-    else:
-        scale = 32.0
+    scale = 64.0
 
     # Head
     if args.margin_type == 'ArcFace':
@@ -128,15 +125,15 @@ def train(args):
 
 
     if args.dataset == 'casia':
-        ratio = 512 / args.batch_total_size
-        iter_size = int(959 * ratio)
+        ratio = 256 / args.batch_total_size
+        iter_size = int(1917 * ratio)
         print('iter_size: ', iter_size)
         if args.margin_type == 'AdaFace':
             finish_iters = (iter_size * 26)
-            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[iter_size * 12, iter_size * 20, iter_size * 24], gamma=0.1)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[iter_size * 12, iter_size * 16, iter_size * 20, iter_size * 24], gamma=0.1)
         else:
             finish_iters = (iter_size * 24)
-            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[iter_size * 10, iter_size * 18, iter_size * 22], gamma=0.1)
+            exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[iter_size * 10, iter_size * 14, iter_size * 18, iter_size * 22], gamma=0.1)
 
     elif args.dataset == 'mini_casia':
         finish_iters = 24000

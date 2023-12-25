@@ -22,6 +22,8 @@ from PIL import Image
 from scipy.io import loadmat
 from sklearn.metrics import roc_curve, auc
 import pickle
+import heapq
+import math
 
 
 class DATASET(Dataset):
@@ -114,14 +116,11 @@ def infer_images(model, image_list, batch_size, use_flip_test, qualnet=False):
 def identification(gallery_feature_list, mated_probe_feature_list, unmated_probe_feature_list,
                    gallery_sets, mated_probe_sets,  
                    save_dir, prefix, do_norm=True, template=True):
+    
     # Feature and Pathes
     gallery_feature, gallery_feature_paths = gallery_feature_list
     mated_feature, mated_feature_paths = mated_probe_feature_list
-    unmated_feature, unmated_feature_paths = unmated_probe_feature_list
-
-    # ID and Pathes
-    gallery_id, gallery_path = gallery_sets
-    mated_id, mated_path = mated_probe_sets
+    unmated_feature, _ = unmated_probe_feature_list
 
     # Normalization
     if do_norm: 
@@ -129,13 +128,121 @@ def identification(gallery_feature_list, mated_probe_feature_list, unmated_probe
         mated_feature = mated_feature / np.linalg.norm(mated_feature, ord=2, axis=1).reshape(-1,1)
         unmated_feature = unmated_feature / np.linalg.norm(unmated_feature, ord=2, axis=1).reshape(-1,1)
 
+    # ID and Pathes
+    gallery_id_list, gallery_path_list = gallery_sets
     
+    mated_id_list, mated_path_list = mated_probe_sets
+    mated_dict = {key[0][0]: value[0] for key, value in zip(mated_path_list, mated_id_list)}
+
     # Template Construction
+    gallery_unique_id_list = np.unique(gallery_id_list)
+    template_feat_list = []
+    template_id_list = []
+    for id in tqdm(gallery_unique_id_list):
+        # append id
+        template_id_list.append(id)
 
-    pass
+        # append feature
+        path_id_list = gallery_path_list[np.where(gallery_id_list == id)[0], 0]
+        for ix, path in enumerate(path_id_list):
+            feat_ix = gallery_feature[np.where(gallery_feature_paths == path[0])[0]][0]
+            if ix == 0:
+                feature = feat_ix
+            else:
+                feature += feat_ix
+        
+        feature /= len(path_id_list)
+        template_feat_list.append(feature)
 
+    template_feat_list = np.array(template_feat_list)
+    if do_norm: 
+        template_feat_list = template_feat_list / np.linalg.norm(template_feat_list, ord=2, axis=1).reshape(-1,1)
+    template_id_list = np.array(template_id_list)
+    
+
+    # Construct ID list
+    probe_id_list = []
+    for path in tqdm(mated_feature_paths):
+        id_ix = mated_dict[path]
+        probe_id_list.append(id_ix)
+    probe_id_list += [-100] * len(unmated_feature)
+    probe_id_list = np.array(probe_id_list)
+
+    # Construct Probe Features
+    probe_feats = np.concatenate([mated_feature, unmated_feature], axis=0)
+
+    # Measure TPIR{N}@FPIR{M}
+    result = evaluation(probe_id_list, probe_feats, template_feat_list, template_id_list)
+    return result
+
+
+def evaluation(query_ids, probe_feats, gallery_feats, gallery_ids):
+    similarity = np.dot(probe_feats, gallery_feats.T)
+
+    negative_index = np.where(query_ids == -100)[0]
+    scores1 = np.empty(len(negative_index))
+    for n in range(len(negative_index)):
+        score = np.sort(similarity[negative_index[n], :])[::-1]
+        scores1[n] = score[0]  # only consider the highest score
+
+    # Searching step
+    step = (np.max(scores1) - np.min(scores1)) / 1000
+    thresholds = []
+    FPIRs = []
+    for threshold in np.arange(np.min(scores1), np.max(scores1), step):
+        current_fpir = np.sum(scores1 > threshold) / len(scores1)
+        thresholds.append(threshold)
+        FPIRs.append(current_fpir)
+
+    # Compute FNIR corresponding to FPIR
+    positive_index = np.where(query_ids != -100)[0]
+    L = 20
+    gt_scores = np.empty(len(positive_index))
+    for p in range(len(positive_index)):
+        query_id = query_ids[positive_index[p]]
+        similarity_ix = similarity[positive_index[p], :]
+        top_indices = np.argsort(similarity_ix)[::-1][:L]
+        
+        if query_id in gallery_ids[top_indices]:
+            gt_scores[p] = np.max(similarity_ix[top_indices])
+        else:
+            gt_scores[p] = -100000
+
+
+    FNIRs = []
+    for threshold in thresholds:
+        current_fnir = np.sum(gt_scores < threshold) / len(gt_scores)
+        FNIRs.append(current_fnir)
+
+
+    # Sort FPIRs and corresponding FNIRs and thresholds
+    FPIRs, fpir_index = np.sort(FPIRs), np.argsort(FPIRs)
+    FNIRs = np.array(FNIRs)[fpir_index]
+    thresholds = np.array(thresholds)[fpir_index]
+
+    # Draw the TPIR@FPIR curve
+    # plt.figure()
+    # plt.plot(FPIRs, 1 - np.array(FNIRs))
+    # plt.title('TPIR@FPIR Curve')
+    # plt.xlabel('FPIR')
+    # plt.ylabel('TPIR')
+
+    # Show the TPIR20@FPIR=0.3/0.2/0.1 results & AUC
+    def find_nearest(array, value):
+        idx = (np.abs(array - value)).argmin()
+        return idx, array[idx]
+
+    FPIRs_03_idx, _ = find_nearest(FPIRs, 0.3)
+    FPIRs_02_idx, _ = find_nearest(FPIRs, 0.2)
+    FPIRs_01_idx, _ = find_nearest(FPIRs, 0.1)
+    TPIR_FPIR_03 = 1 - FNIRs[FPIRs_03_idx]
+    TPIR_FPIR_02 = 1 - FNIRs[FPIRs_02_idx]
+    TPIR_FPIR_01 = 1 - FNIRs[FPIRs_01_idx]
+    AUC = np.trapz(1 - np.array(FNIRs), FPIRs)
+
+    print(f'TPIR20@FPIR=0.3/0.2/0.1: {TPIR_FPIR_03} / {TPIR_FPIR_02} / {TPIR_FPIR_01}')
+    print(f'AUC: {AUC}')
     return None
-
 
 
 
@@ -166,12 +273,12 @@ def load_model(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='do ijb test')
     parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/QMUL-SurvFace/Face_Identification_Test_Set/')
-    parser.add_argument('--gpus', default='7', type=str)
+    parser.add_argument('--gpus', default='3', type=str)
     parser.add_argument('--batch_size', default=256, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
     parser.add_argument('--backbone', type=str, default='iresnet50')
     parser.add_argument('--pooling', type=str, default='E') #
-    parser.add_argument('--checkpoint_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/test/old_result_(m=default)/student-casia/iresnet50-E-IR-CosFace/resol1-random/F_SKD_CROSS_BN-P{20.0,4.0}-M{0.0}/seed{5}', help='scale size')
+    parser.add_argument('--checkpoint_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/case1/HR-LR-PHOTO{0.2},LR{0.2},type{range}/iresnet50-AdaFace-0.4', help='scale size')
     parser.add_argument('--save_dir', type=str, default='result/', help='scale size')
     parser.add_argument('--prefix', type=str, default='aa', help='scale size')
 

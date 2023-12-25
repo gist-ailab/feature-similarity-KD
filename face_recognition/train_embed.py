@@ -114,8 +114,8 @@ def selection(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
-    parser.add_argument('--dataset', type=str, default='webface4m')
-    parser.add_argument('--data_dir', type=str, default='/SSDb/sung/dataset/face_dset/')
+    parser.add_argument('--dataset', type=str, default='casia')
+    parser.add_argument('--data_dir', type=str, default='/home/jovyan/SSDb/sung/dataset/face_dset/')
 
     parser.add_argument('--mode', type=str, default='ir', help='attention type', choices=['ir', 'cbam'])
     parser.add_argument('--backbone', type=str, default='iresnet50')
@@ -123,10 +123,10 @@ if __name__ == '__main__':
     
     parser.add_argument('--feature_dim', type=int, default=512, help='feature dimension, 128 or 512')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
-    parser.add_argument('--gpus', type=str, default='6', help='model prefix')
-    parser.add_argument('--seed', type=int, default=5)
+    parser.add_argument('--gpus', type=str, default='1', help='model prefix')
+    parser.add_argument('--seed', type=int, default=1)
 
-    parser.add_argument('--teacher_path', type=str, default='/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/teacher-webface4m/iresnet50-E-IR-AdaFace/seed{5}/last_net.ckpt')
+    parser.add_argument('--teacher_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/final_ablation/casia/case0/HR_only/iresnet50-AdaFace/last_net.ckpt')
     args = parser.parse_args()
 
 

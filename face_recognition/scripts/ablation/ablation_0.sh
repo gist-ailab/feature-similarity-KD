@@ -9,12 +9,12 @@
 # 1. WEBFACE4M
 for MARGIN in AdaFace CosFace ArcFace
 do
-    SEED=5
+    SEED=1
 
     # Teacher Train
     # Set MARGIN_F based on the MARGIN value
     if [ "$MARGIN" = "CosFace" ]; then
-        MARGIN_F=0.35
+        MARGIN_F=0.4
     elif [ "$MARGIN" = "ArcFace" ]; then
         MARGIN_F=0.5
     elif [ "$MARGIN" = "AdaFace" ]; then
@@ -30,14 +30,14 @@ done
 
 
 # 2. CASIA
-for MARGIN in AdaFace
+for MARGIN in CosFace
 do
-    SEED=5
+    SEED=1
 
     # Teacher Train
     # Set MARGIN_F based on the MARGIN value
     if [ "$MARGIN" = "CosFace" ]; then
-        MARGIN_F=0.35
+        MARGIN_F=0.4
     elif [ "$MARGIN" = "ArcFace" ]; then
         MARGIN_F=0.5
     elif [ "$MARGIN" = "AdaFace" ]; then
@@ -47,8 +47,6 @@ do
     RESOLUTION=0
     BACKBONE=iresnet50
     POOLING=E
-    CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.launch --nnodes=1 --nproc_per_node=2 --master_port=611 train_teacher_multi.py --seed $SEED --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/final_ablation/$DATASET/case0/HR_only/$BACKBONE-$MARGIN \
-                            --down_size $RESOLUTION --mode ir --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE --dataset $DATASET --batch_size 512 --margin_float $MARGIN_F
+    python train_teacher.py --gpus 0 --seed $SEED --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/final_ablation/$DATASET/case0/HR_only/$BACKBONE-$MARGIN \
+                            --down_size $RESOLUTION --mode ir --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE --dataset $DATASET --batch_size 256 --margin_float $MARGIN_F
 done
-
-

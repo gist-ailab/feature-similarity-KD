@@ -20,12 +20,14 @@ def img_loader(augmenter, path, down_size):
                 high_img = np.stack([high_img] * 3, 2)
             
             if (down_size == 112) or (down_size == 0):
-                down_img = high_img
+                down_img = high_img.copy()
+
             elif down_size == 1:
                 down_img = high_img.copy()
                 down_img = Image.fromarray(down_img)
                 down_img = augmenter.augment(down_img)
                 down_img = np.array(down_img)
+
             else:
                 down_img = high_img
                 
