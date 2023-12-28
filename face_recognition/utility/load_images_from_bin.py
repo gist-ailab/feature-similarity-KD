@@ -3,9 +3,6 @@
 from PIL import Image
 import pickle
 import os
-from tqdm import tqdm
-import argparse
-from torch.utils.data import DataLoader
 import argparse
 from tqdm import tqdm
 import numpy as np
@@ -95,8 +92,8 @@ def generate_dataset_list(dataset_path,dataset_list):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='PyTorch for deep face recognition')
-    parser.add_argument('--data_dir', type=str, default='/SSDb/sung/dataset/face_dset')
-    parser.add_argument('--data_name', type=str, default='webface4m')
+    parser.add_argument('--data_dir', type=str, default='/data/sung/dataset/face_dset')
+    parser.add_argument('--data_name', type=str, default='faces_webface_112x112')
     parser.add_argument('--data_type', type=str, default='train', help='train or evaluation')
     args = parser.parse_args()
     
@@ -125,7 +122,8 @@ if __name__=='__main__':
         rec_path = os.path.join(data_dir, args.data_name)
         if 'webface4m' not in args.data_name:
             import mxnet as mx
-            from mxdataset import MXDataset
+            # from mxdataset import MXDataset
+            # from torch.utils.data import DataLoader
             load_mx_rec(rec_path)
         
         dataset = os.path.join(data_dir, args.data_name, 'image')

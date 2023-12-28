@@ -13,7 +13,6 @@ do
     RESOLUTION=0
     BACKBONE=iresnet50
     POOLING=E
-    python train_teacher.py --gpus 3 --seed $SEED --data_dir /home/jovyan/SSDb/sung/dataset/face_dset/ --save_dir checkpoint/teacher-$DATASET/$BACKBONE-$MARGIN \
+    python train_teacher.py --gpus 0 --seed $SEED --data_dir /data/sung/dataset/face_dset/ --save_dir checkpoint/teacher-$DATASET/$BACKBONE-$MARGIN \
                             --down_size $RESOLUTION --mode ir --margin_type $MARGIN --pooling $POOLING --backbone $BACKBONE --dataset $DATASET --batch_size 256 --margin_float $MARGIN_F
 done
-
