@@ -231,6 +231,13 @@ def train(args):
             finish_iters = (11373 * 24)
             exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[11373 * 10, 11373 * 18, 11373 * 22], gamma=0.1)
 
+
+    if args.mixed_precision:
+        scaler = torch.cuda.amp.GradScaler()
+    else:
+        scaler = None
+
+
     # Run
     GOING = True
     while GOING:
@@ -258,93 +265,183 @@ def train(args):
                 HR_manager.attention = []
                 
 
-            # High-Resolution Forward
-            with torch.no_grad():
-                HR_logits, HR_feat_list = aux_net(HR_img, extract_feature=True)
+            if scaler is None:
+                # High-Resolution Forward
+                with torch.no_grad():
+                    HR_logits, HR_feat_list = aux_net(HR_img, extract_feature=True)
 
+                    if args.cross_sampling:
+                        _, HR_pos_feat_list = aux_net(HR_pos_img, extract_feature=True)
+
+                    if args.margin_type == 'AdaFace':
+                        HR_norm = torch.norm(HR_logits, 2, 1, True)
+                        HR_out = margin(HR_logits, HR_norm, label)
+                    elif args.margin_type == 'MagFace':
+                        HR_out, _ = margin(HR_logits)
+                    else:
+                        HR_out = aux_margin(HR_logits, label)
+                
+
+                # Low-Resolution Forward     
+                LR_logits, LR_feat_list = net(LR_img, extract_feature=True)
                 if args.cross_sampling:
-                    _, HR_pos_feat_list = aux_net(HR_pos_img, extract_feature=True)
+                    _, LR_pos_feat_list = net(LR_pos_img, extract_feature=True)
 
                 if args.margin_type == 'AdaFace':
-                    HR_norm = torch.norm(HR_logits, 2, 1, True)
-                    HR_out = margin(HR_logits, HR_norm, label)
+                    LR_norm = torch.norm(LR_logits, 2, 1, True)
+                    LR_out = margin(LR_logits, LR_norm, label)
                 elif args.margin_type == 'MagFace':
-                    HR_out, _ = margin(HR_logits)
+                    LR_out, LR_norm = margin(LR_logits)    
                 else:
-                    HR_out = aux_margin(HR_logits, label)
-            
+                    LR_out = margin(LR_logits, label)
 
-            # Low-Resolution Forward     
-            LR_logits, LR_feat_list = net(LR_img, extract_feature=True)
-            if args.cross_sampling:
-                _, LR_pos_feat_list = net(LR_pos_img, extract_feature=True)
-
-            if args.margin_type == 'AdaFace':
-                LR_norm = torch.norm(LR_logits, 2, 1, True)
-                LR_out = margin(LR_logits, LR_norm, label)
-            elif args.margin_type == 'MagFace':
-                LR_out, LR_norm = margin(LR_logits)    
-            else:
-                LR_out = margin(LR_logits, label)
-
-            
-            # Recognition Loss
-            if args.margin_type == 'MagFace':
-                soft_loss, loss_g, LR_out = criterion(LR_out, label, LR_norm)
-                cri_loss = soft_loss + loss_g * 20.0
-            else:
-                cri_loss = criterion(LR_out, label)
-
-            # Distillation
-            distill_param = list(map(float, args.distill_param.split(',')))
-
-            # Point distillation
-            point_loss = 0.
-            if distill_param[0] > 0.:
-                if 'F_SKD' in args.distill_type:
-                    for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
-                        point_loss = point_loss + cosine_loss(LR_feat, HR_feat) / len(HR_feat_list)
                 
-                elif args.distill_type == 'A_SKD' : 
-                    for HR_feat, LR_feat in zip(HR_manager.attention, LR_manager.attention):
-                        point_loss = point_loss + (cosine_loss(LR_feat[0], HR_feat[0]) + cosine_loss(LR_feat[1], HR_feat[1])) / len(HR_manager.attention) / 2
-                
-                elif args.distill_type == 'RKD':
-                    point_loss = point_loss + RKD_cri(w_dist=1., w_angle=2.)(LR_logits, HR_logits)
+                # Recognition Loss
+                if args.margin_type == 'MagFace':
+                    soft_loss, loss_g, LR_out = criterion(LR_out, label, LR_norm)
+                    cri_loss = soft_loss + loss_g * 20.0
+                else:
+                    cri_loss = criterion(LR_out, label)
+
+                # Distillation
+                distill_param = list(map(float, args.distill_param.split(',')))
+
+                # Point distillation
+                point_loss = 0.
+                if distill_param[0] > 0.:
+                    if 'F_SKD' in args.distill_type:
+                        for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
+                            point_loss = point_loss + cosine_loss(LR_feat, HR_feat) / len(HR_feat_list)
                     
-                elif args.distill_type == 'FitNet':
-                    for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
-                        point_loss = point_loss + mse_loss(LR_feat, HR_feat) / len(HR_feat_list)
+                    elif args.distill_type == 'A_SKD' : 
+                        for HR_feat, LR_feat in zip(HR_manager.attention, LR_manager.attention):
+                            point_loss = point_loss + (cosine_loss(LR_feat[0], HR_feat[0]) + cosine_loss(LR_feat[1], HR_feat[1])) / len(HR_manager.attention) / 2
+                    
+                    elif args.distill_type == 'RKD':
+                        point_loss = point_loss + RKD_cri(w_dist=1., w_angle=2.)(LR_logits, HR_logits)
+                        
+                    elif args.distill_type == 'FitNet':
+                        for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
+                            point_loss = point_loss + mse_loss(LR_feat, HR_feat) / len(HR_feat_list)
+                    
+                    elif args.distill_type == 'AT':
+                        for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
+                            point_loss = point_loss + AT_cri(p=2)(LR_feat, HR_feat) / len(HR_feat_list)
                 
-                elif args.distill_type == 'AT':
-                    for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
-                        point_loss = point_loss + AT_cri(p=2)(LR_feat, HR_feat) / len(HR_feat_list)
-            
-                else:
-                    raise('No Proper Distillation')
-                
+                    else:
+                        raise('No Proper Distillation')
+                    
 
-            # Cross Distillation Loss
-            cross_loss = 0.    
-            if (distill_param[1] > 0.):
-                if args.cross_sampling:
-                    cross_loss = cross_loss + cross_sample_kd()(LR_feat_list[-1][correct_index], LR_pos_feat_list[-1][correct_index],
-                                                    HR_feat_list[-1][correct_index], HR_pos_feat_list[-1][correct_index])
-                else:
-                    new_correct_index = list(range(torch.sum(correct_index).item()))
-                    random.shuffle(new_correct_index)
-                    cross_loss = cross_loss + cross_sample_kd()(LR_feat_list[-1][correct_index], LR_feat_list[-1][correct_index][new_correct_index],
-                                                         HR_feat_list[-1][correct_index], HR_feat_list[-1][correct_index][new_correct_index])
+                # Cross Distillation Loss
+                cross_loss = 0.    
+                if (distill_param[1] > 0.):
+                    if args.cross_sampling:
+                        cross_loss = cross_loss + cross_sample_kd()(LR_feat_list[-1][correct_index], LR_pos_feat_list[-1][correct_index],
+                                                        HR_feat_list[-1][correct_index], HR_pos_feat_list[-1][correct_index])
+                    else:
+                        new_correct_index = list(range(torch.sum(correct_index).item()))
+                        random.shuffle(new_correct_index)
+                        cross_loss = cross_loss + cross_sample_kd()(LR_feat_list[-1][correct_index], LR_feat_list[-1][correct_index][new_correct_index],
+                                                            HR_feat_list[-1][correct_index], HR_feat_list[-1][correct_index][new_correct_index])
+                    
+                distill_loss = point_loss * distill_param[0] + cross_loss * distill_param[1]
                 
-            distill_loss = point_loss * distill_param[0] + cross_loss * distill_param[1]
-            
-            # Total Loss
-            total_loss = cri_loss + distill_loss
+                # Total Loss
+                total_loss = cri_loss + distill_loss
 
-            # Optim
-            optimizer_ft.zero_grad()
-            total_loss.backward()
-            optimizer_ft.step()
+                # Optim
+                optimizer_ft.zero_grad()
+                total_loss.backward()
+                optimizer_ft.step()
+            else:
+                with torch.cuda.amp.autocast():
+                    # High-Resolution Forward
+                    with torch.no_grad():
+                        HR_logits, HR_feat_list = aux_net(HR_img, extract_feature=True)
+
+                        if args.cross_sampling:
+                            _, HR_pos_feat_list = aux_net(HR_pos_img, extract_feature=True)
+
+                        if args.margin_type == 'AdaFace':
+                            HR_norm = torch.norm(HR_logits, 2, 1, True)
+                            HR_out = margin(HR_logits, HR_norm, label)
+                        elif args.margin_type == 'MagFace':
+                            HR_out, _ = margin(HR_logits)
+                        else:
+                            HR_out = aux_margin(HR_logits, label)
+                    
+                    # Low-Resolution Forward     
+                    LR_logits, LR_feat_list = net(LR_img, extract_feature=True)
+                    if args.cross_sampling:
+                        _, LR_pos_feat_list = net(LR_pos_img, extract_feature=True)
+
+                    if args.margin_type == 'AdaFace':
+                        LR_norm = torch.norm(LR_logits, 2, 1, True)
+                        LR_out = margin(LR_logits, LR_norm, label)
+                    elif args.margin_type == 'MagFace':
+                        LR_out, LR_norm = margin(LR_logits)    
+                    else:
+                        LR_out = margin(LR_logits, label)
+
+                    
+                    # Recognition Loss
+                    if args.margin_type == 'MagFace':
+                        soft_loss, loss_g, LR_out = criterion(LR_out, label, LR_norm)
+                        cri_loss = soft_loss + loss_g * 20.0
+                    else:
+                        cri_loss = criterion(LR_out, label)
+
+                    # Distillation
+                    distill_param = list(map(float, args.distill_param.split(',')))
+
+                    # Point distillation
+                    point_loss = 0.
+                    if distill_param[0] > 0.:
+                        if 'F_SKD' in args.distill_type:
+                            for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
+                                point_loss = point_loss + cosine_loss(LR_feat, HR_feat) / len(HR_feat_list)
+                        
+                        elif args.distill_type == 'A_SKD' : 
+                            for HR_feat, LR_feat in zip(HR_manager.attention, LR_manager.attention):
+                                point_loss = point_loss + (cosine_loss(LR_feat[0], HR_feat[0]) + cosine_loss(LR_feat[1], HR_feat[1])) / len(HR_manager.attention) / 2
+                        
+                        elif args.distill_type == 'RKD':
+                            point_loss = point_loss + RKD_cri(w_dist=1., w_angle=2.)(LR_logits, HR_logits)
+                            
+                        elif args.distill_type == 'FitNet':
+                            for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
+                                point_loss = point_loss + mse_loss(LR_feat, HR_feat) / len(HR_feat_list)
+                        
+                        elif args.distill_type == 'AT':
+                            for HR_feat, LR_feat in zip(HR_feat_list, LR_feat_list):
+                                point_loss = point_loss + AT_cri(p=2)(LR_feat, HR_feat) / len(HR_feat_list)
+                    
+                        else:
+                            raise('No Proper Distillation')
+                        
+
+                    # Cross Distillation Loss
+                    cross_loss = 0.    
+                    if (distill_param[1] > 0.):
+                        if args.cross_sampling:
+                            cross_loss = cross_loss + cross_sample_kd()(LR_feat_list[-1][correct_index], LR_pos_feat_list[-1][correct_index],
+                                                            HR_feat_list[-1][correct_index], HR_pos_feat_list[-1][correct_index])
+                        else:
+                            new_correct_index = list(range(torch.sum(correct_index).item()))
+                            random.shuffle(new_correct_index)
+                            cross_loss = cross_loss + cross_sample_kd()(LR_feat_list[-1][correct_index], LR_feat_list[-1][correct_index][new_correct_index],
+                                                                HR_feat_list[-1][correct_index], HR_feat_list[-1][correct_index][new_correct_index])
+                        
+                    distill_loss = point_loss * distill_param[0] + cross_loss * distill_param[1]
+                    
+                    # Total Loss
+                    total_loss = cri_loss + distill_loss
+
+                # Optim
+                optimizer_ft.zero_grad()
+                scaler.scale(total_loss).backward()
+                scaler.step(optimizer_ft)
+                scaler.update()
 
 
             # Clear Features
@@ -577,6 +674,8 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=2022)
     
     parser.add_argument('--margin_float', type=float)
+
+    parser.add_argument('--mixed_precision', type=lambda x: x.lower()=='true', default=True)
 
     parser.add_argument('--hint_bn', type=lambda x: x.lower()=='true', default=True)
     parser.add_argument('--cross_sampling', type=lambda x: x.lower()=='true', default=False)

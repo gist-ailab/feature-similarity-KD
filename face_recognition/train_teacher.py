@@ -156,6 +156,12 @@ def train(args):
 
     total_iters = 0
 
+    if args.mixed_precision:
+        scaler = torch.cuda.amp.GradScaler()
+    else:
+        scaler = None
+
+
     # Run
     GOING = True
     while GOING:
@@ -168,29 +174,57 @@ def train(args):
         # trainloader.dataset.update_candidate()
         for data in tqdm(trainloader):            
             img, label = data[1].to(device), data[2].to(device)                  
-                        
-            raw_logits = net(img)
-            if args.margin_type == 'AdaFace':
-                norm = torch.norm(raw_logits, 2, 1, True)
-                out = margin(raw_logits, norm, label)
-            elif args.margin_type == 'MagFace':
-                out, norm = margin(raw_logits)
-            else:
-                out = margin(raw_logits, label)
-            
-            # Loss
-            if args.margin_type == 'MagFace':
-                cri_loss, loss_g, out = criterion(out, label, norm)
-                total_loss = cri_loss + loss_g * 20.0
-            else:
-                cri_loss = criterion(out, label)
-                total_loss = cri_loss
+
+            if scaler is None:
+                raw_logits = net(img)
+                if args.margin_type == 'AdaFace':
+                    norm = torch.norm(raw_logits, 2, 1, True)
+                    out = margin(raw_logits, norm, label)
+                elif args.margin_type == 'MagFace':
+                    out, norm = margin(raw_logits)
+                else:
+                    out = margin(raw_logits, label)
+                
+                # Loss
+                if args.margin_type == 'MagFace':
+                    cri_loss, loss_g, out = criterion(out, label, norm)
+                    total_loss = cri_loss + loss_g * 20.0
+                else:
+                    cri_loss = criterion(out, label)
+                    total_loss = cri_loss
 
 
-            # Optim
-            optimizer_ft.zero_grad()
-            total_loss.backward()
-            optimizer_ft.step()
+                # Optim
+                optimizer_ft.zero_grad()    
+                total_loss.backward()
+                optimizer_ft.step()
+
+            else:
+                with torch.cuda.amp.autocast():
+                    raw_logits = net(img)
+                    if args.margin_type == 'AdaFace':
+                        norm = torch.norm(raw_logits, 2, 1, True)
+                        out = margin(raw_logits, norm, label)
+                    elif args.margin_type == 'MagFace':
+                        out, norm = margin(raw_logits)
+                    else:
+                        out = margin(raw_logits, label)
+                    
+                    # Loss
+                    if args.margin_type == 'MagFace':
+                        cri_loss, loss_g, out = criterion(out, label, norm)
+                        total_loss = cri_loss + loss_g * 20.0
+                    else:
+                        cri_loss = criterion(out, label)
+                        total_loss = cri_loss
+
+                # Optim
+                optimizer_ft.zero_grad()
+                scaler.scale(total_loss).backward()
+                scaler.step(optimizer_ft)
+                scaler.update()
+
+
 
             # print train information
             if total_iters % 100 == 0:
@@ -405,6 +439,8 @@ if __name__ == '__main__':
     parser.add_argument('--lr_prob', type=float)
 
     parser.add_argument('--margin_float', type=float)
+
+    parser.add_argument('--mixed_precision', type=lambda x: x.lower()=='true', default=True)
 
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--backbone', type=str, default='iresnet50')
