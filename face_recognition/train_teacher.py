@@ -63,7 +63,7 @@ def train(args):
     ])
 
     # validation dataset
-    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, photo_prob=args.photo_prob, lr_prob=args.lr_prob, size_type=args.size_type)
+    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8, drop_last=False)
     
     # define backbone and margin layer
@@ -434,12 +434,7 @@ if __name__ == '__main__':
     parser.add_argument('--down_size', type=int, default=1) # 1 : all type, 0 : high, others : low
     parser.add_argument('--pooling', type=str, default='E') #
 
-    parser.add_argument('--size_type', type=str, choices=['range', 'fix']) #
-    parser.add_argument('--photo_prob', type=float)
-    parser.add_argument('--lr_prob', type=float)
-
     parser.add_argument('--margin_float', type=float)
-
     parser.add_argument('--mixed_precision', type=lambda x: x.lower()=='true', default=True)
 
     parser.add_argument('--seed', type=int, default=1)

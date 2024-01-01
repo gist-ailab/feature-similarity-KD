@@ -71,9 +71,8 @@ def train(args):
 
     # validation dataset
     trainset =  FaceDataset(args.train_root, args.dataset, args.train_file_list, args.down_size, transform=transform, 
-                            photo_prob=args.photo_prob, lr_prob=args.lr_prob, size_type=args.size_type,
                             teacher_folder=os.path.dirname(args.teacher_path), cross_sampling=args.cross_sampling, margin=args.cross_margin)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=False)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8, drop_last=False)
 
 
     if ('F_SKD' in args.distill_type) or (args.distill_type == 'FitNet'):
@@ -90,18 +89,16 @@ def train(args):
     elif args.backbone == 'mobilenet':
         net = get_mbf_large(fp16=False, num_features=args.feature_dim, student=hint_layer, hint_bn=args.hint_bn)
 
-    # Head
-    scale = 64.0
 
     # Margin
     if args.margin_type == 'ArcFace':
-        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     elif args.margin_type == 'CosFace':
-        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     elif args.margin_type == 'AdaFace':
-        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     elif args.margin_type == 'MagFace':
-        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     else:
         print(args.margin_type, 'is not available!')
 
@@ -671,10 +668,7 @@ if __name__ == '__main__':
     parser.add_argument('--backbone', type=str, default='iresnet50')
     parser.add_argument('--pooling', type=str, default='E')
     
-    parser.add_argument('--size_type', type=str, choices=['range', 'fix']) #
-    parser.add_argument('--photo_prob', type=float)
-    parser.add_argument('--lr_prob', type=float)
-    
+    parser.add_argument('--scale', type=float)
     parser.add_argument('--margin_float', type=float)
     
     parser.add_argument('--margin_type', type=str, default='CosFace', help='ArcFace, CosFace, SphereFace, MultiMargin, Softmax')
