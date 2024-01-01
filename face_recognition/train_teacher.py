@@ -75,16 +75,14 @@ def train(args):
         net = get_mbf_large(fp16=False, num_features=args.feature_dim)
 
     # Head
-    scale = 64.0
-
     if args.margin_type == 'ArcFace':
-        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     elif args.margin_type == 'CosFace':
-        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     elif args.margin_type == 'AdaFace':
-        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     elif args.margin_type == 'MagFace':
-        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     else:
         print(args.margin_type, 'is not available!')
 
@@ -434,6 +432,7 @@ if __name__ == '__main__':
     parser.add_argument('--down_size', type=int, default=1) # 1 : all type, 0 : high, others : low
     parser.add_argument('--pooling', type=str, default='E') #
 
+    parser.add_argument('--scale', type=float)
     parser.add_argument('--margin_float', type=float)
     parser.add_argument('--mixed_precision', type=lambda x: x.lower()=='true', default=True)
 

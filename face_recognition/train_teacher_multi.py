@@ -97,17 +97,14 @@ def train(args):
         net = iresnet18(attention_type=args.mode, pooling=args.pooling)    
 
     # Head
-    scale = 64.0
-
-    # Head
     if args.margin_type == 'ArcFace':
-        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = ArcMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     elif args.margin_type == 'CosFace':
-        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = CosineMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     elif args.margin_type == 'AdaFace':
-        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = AdaMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     elif args.margin_type == 'MagFace':
-        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=scale)
+        margin = MagMarginProduct(args.feature_dim, trainset.class_nums, m=args.margin_float, s=args.scale)
     else:
         print(args.margin_type, 'is not available!')
 
@@ -447,14 +444,14 @@ if __name__ == '__main__':
     parser.add_argument('--down_size', type=int, default=1) # 1 : all type, 0 : high, others : low
     parser.add_argument('--pooling', type=str, default='E') #
 
+    parser.add_argument('--mixed_precision', type=lambda x: x.lower()=='true', default=True)
+    parser.add_argument('--scale', type=float)
     parser.add_argument('--margin_float', type=float)
 
     parser.add_argument('--global_rank', type=int, default=0)
     parser.add_argument("--local-rank", type=int, help="Local rank. Necessary for using the torch.distributed.launch utility.")
     parser.add_argument('--world_size', type=int, default=0)
     parser.add_argument('--port', type=int, default=2022)
-
-    parser.add_argument('--mixed_precision', type=lambda x: x.lower()=='true', default=True)
 
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--backbone', type=str, default='iresnet50')
