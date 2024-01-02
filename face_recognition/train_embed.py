@@ -51,7 +51,7 @@ def selection(args):
     ])
 
     # validation dataset
-    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, 0, transform=transform, photo_prob=0.0, lr_prob=0.0, size_type='none')
+    trainset = FaceDataset(args.train_root, args.dataset, args.train_file_list, 0, transform=transform)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=False)
 
     # define backbone and margin layer
