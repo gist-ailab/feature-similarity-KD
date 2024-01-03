@@ -660,6 +660,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=1)
     
     parser.add_argument('--global_rank', type=int, default=0)
+    parser.add_argument("--local_rank", type=int, help="Local rank. Necessary for using the torch.distributed.launch utility.")
     parser.add_argument("--local-rank", type=int, help="Local rank. Necessary for using the torch.distributed.launch utility.")
     parser.add_argument('--world_size', type=int, default=0)
     parser.add_argument('--port', type=int, default=2022)
