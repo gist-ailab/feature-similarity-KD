@@ -34,6 +34,7 @@ class ListDataset(Dataset):
         image_path = self.img_list[idx]
         img = cv2.imread(image_path)
         img = img[:, :, :3]
+
         img = cv2.resize(img, dsize=(112, 112), interpolation=cv2.INTER_LINEAR)
 
         # To Tensor
@@ -151,12 +152,12 @@ def calc_accuracy(tinyface_test, probe, gallery, aligned, do_norm=True):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='tinyface')
     parser.add_argument('--data_dir', default='/home/jovyan/SSDb/sung/dataset/face_dset/tinyface')
-    parser.add_argument('--gpus', default='6', type=str)
+    parser.add_argument('--gpus', default='0', type=str)
     parser.add_argument('--batch_size', default=256, type=int, help='')
     parser.add_argument('--mode', type=str, default='ir', help='attention type')
-    parser.add_argument('--backbone', type=str, default='iresnet50')
+    parser.add_argument('--backbone', type=str, default='iresnet18')
     parser.add_argument('--pooling', type=str, default='E') #
-    parser.add_argument('--checkpoint_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/student-casia/iresnet50-CosFace-m{0.2}-s{64.0}/seed{5}', help='scale size')
+    parser.add_argument('--checkpoint_path', type=str, default='/home/jovyan/SSDb/sung/src/feature-similarity-KD/face_recognition/checkpoint/student-casia/iresnet18-ArcFace-m{0.2}-s{32.0}-MP{False}-logit{False}/seed{1}', help='scale size')
 
     parser.add_argument('--save_dir', type=str, default='imp/', help='scale size')
     parser.add_argument('--prefix', type=str, default='aa', help='scale size')

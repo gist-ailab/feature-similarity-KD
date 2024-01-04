@@ -30,7 +30,7 @@ from tqdm import tqdm
 import torch.nn.functional as F
 from copy import deepcopy
 import random
-from metric.distill_loss import cosine_loss, cross_sample_kd, RKD_cri, AT_cri, mse_loss
+from metric.distill_loss import cosine_loss, cross_sample_kd, RKD_cri, AT_cri, mse_loss, HKD_cri
 from collections import OrderedDict
 from utility.hook import feature_hook
 
@@ -343,11 +343,17 @@ def train(args):
                 
                 # Total Loss
                 total_loss = cri_loss + distill_loss
+                
+                if args.logit_distill:
+                    kd_loss = HKD_cri(T=4)(LR_out, HR_out)
+                    total_loss = total_loss + kd_loss
+
 
                 # Optim
                 optimizer_ft.zero_grad()
                 total_loss.backward()
                 optimizer_ft.step()
+                
             else:
                 with torch.cuda.amp.autocast():
                     # High-Resolution Forward
@@ -431,6 +437,10 @@ def train(args):
                     
                     # Total Loss
                     total_loss = cri_loss + distill_loss
+                    
+                    if args.logit_distill:
+                        kd_loss = HKD_cri(T=4)(LR_out, HR_out)
+                        total_loss = total_loss + kd_loss
 
                 # Optim
                 optimizer_ft.zero_grad()
@@ -454,7 +464,10 @@ def train(args):
                 correct = (np.array(predict.cpu()) == np.array(label.data.cpu())).sum()
                 time_cur = (time.time() - since) / 100
                 since = time.time()
-                _print("Iters: {:0>6d}, cri_loss: {:.4f}, distill_loss: {:.4f}, train_accuracy: {:.4f}, time: {:.2f} s/iter, learning rate: {}".format(total_iters, cri_loss.item(), distill_loss.item(), correct/total, time_cur, exp_lr_scheduler.get_lr()[0]))
+                if args.logit_distill:
+                    _print("Iters: {:0>6d}, cri_loss: {:.4f}, distill_loss: {:.4f}, kd_loss: {:.4f}, train_accuracy: {:.4f}, time: {:.2f} s/iter, learning rate: {}".format(total_iters, cri_loss.item(), distill_loss.item(), kd_loss.item(), correct/total, time_cur, exp_lr_scheduler.get_lr()[0]))
+                else:
+                    _print("Iters: {:0>6d}, cri_loss: {:.4f}, distill_loss: {:.4f}, train_accuracy: {:.4f}, time: {:.2f} s/iter, learning rate: {}".format(total_iters, cri_loss.item(), distill_loss.item(), correct/total, time_cur, exp_lr_scheduler.get_lr()[0]))
 
             # save model
             if (total_iters % args.save_freq == 0) and (args.local_rank==0):
@@ -670,6 +683,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--mixed_precision', type=lambda x: x.lower()=='true', default=True)
 
+    parser.add_argument('--logit_distill', type=lambda x: x.lower()=='true', default=False)
     parser.add_argument('--hint_bn', type=lambda x: x.lower()=='true', default=True)
     parser.add_argument('--cross_sampling', type=lambda x: x.lower()=='true', default=False)
     parser.add_argument('--cross_margin', type=float, default=0.5)
